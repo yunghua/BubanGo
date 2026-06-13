@@ -24,6 +24,17 @@ const EMPTY_SESSION: Session = {
   currentWorkerId: "",
 };
 
+/** Map accept_application RPC error codes (raised as messages) to UI text. */
+function translateAcceptError(message: string): string {
+  const m = message ?? "";
+  if (m.includes("application_not_found")) return "找不到申請紀錄";
+  if (m.includes("not_shift_owner")) return "你沒有權限處理這個申請";
+  if (m.includes("shift_not_open")) return "此缺班目前無法接受申請";
+  if (m.includes("shift_already_full")) return "此缺班已額滿，無法再接受";
+  if (m.includes("application_not_pending")) return "此申請已處理過";
+  return `操作失敗：${m}`;
+}
+
 /**
  * Supabase-backed implementation of {@link BubanGoRepository}.
  *
@@ -308,27 +319,20 @@ export class SupabaseRepository implements BubanGoRepository {
     return mapApplicationRow(row, worker ?? null);
   }
 
+  /**
+   * Accept an application atomically via the `accept_application` RPC
+   * (migration 0003). The function locks the shift row FOR UPDATE and does the
+   * capacity check + status flip in one transaction, removing the race the old
+   * read-then-write path had. RLS still applies (SECURITY INVOKER).
+   */
   async acceptApplication(applicationId: string): Promise<void> {
-    const supabase = this.client;
+    const { error } = await this.client.rpc("accept_application", {
+      p_application_id: applicationId,
+    });
 
-    const { data: app, error: readError } = await supabase
-      .from("applications")
-      .select("id, shift_id, status")
-      .eq("id", applicationId)
-      .maybeSingle();
-
-    if (readError) throw new Error(`讀取申請失敗：${readError.message}`);
-    if (!app) throw new Error("找不到申請紀錄");
-    if (app.status !== "pending") throw new Error("此申請已處理過");
-
-    const { error: updateError } = await supabase
-      .from("applications")
-      .update({ status: "accepted" })
-      .eq("id", applicationId);
-
-    if (updateError) throw new Error(`操作失敗：${updateError.message}`);
-
-    await this.recomputeShiftStatus(app.shift_id);
+    if (error) {
+      throw new Error(translateAcceptError(error.message));
+    }
   }
 
   async rejectApplication(applicationId: string): Promise<void> {

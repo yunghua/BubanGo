@@ -2,7 +2,9 @@
 
 This document describes the PostgreSQL schema in [`supabase/schema.sql`](../supabase/schema.sql). It is the live data model for `SupabaseRepository`, which is now the **default** backend (`NEXT_PUBLIC_DATA_BACKEND=supabase`). `localStorageRepository` remains a dev fallback (`=local`).
 
-> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql`.
+> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql` → `supabase/migrations/0003_accept_application_rpc.sql`.
+>
+> **`acceptApplication` is now an RPC.** `SupabaseRepository.acceptApplication()` calls the `public.accept_application(p_application_id uuid)` function (migration 0003) instead of a read-then-write pair. The function locks the `shifts` row `FOR UPDATE` and does the ownership check, capacity check, accept, and `matched` flip in one transaction — eliminating the concurrent-accept race. It is `SECURITY INVOKER`, so RLS still applies; it only adds atomicity, not privilege. `rejectApplication` is unchanged (still repository-side).
 >
 > **Implementation note — `location` ↔ `title`:** the app stores the shift location string in the `shifts.title` column (no separate `location` column in the MVP). `hourly_wage`, `required_workers`, `applicant_count` map to `hourlyRate`, `requiredWorkers`, `applicantCount`. Conversions live in `src/lib/data/mappers.ts`.
 
@@ -195,19 +197,19 @@ Only after manual QA, change `get-repository.ts` to return `supabaseRepository`.
 |-------|------------------|-------------------|
 | `applicant_count` increment on apply | `UPDATE shifts SET applicant_count = applicant_count + 1` after insert | Trigger on `applications` INSERT/DELETE or materialized reconcile |
 | `matched` when enough acceptances | Read accepted count, `UPDATE shifts SET status = 'matched'` | Same inside `accept_application` RPC with `FOR UPDATE` on shift row |
-| `acceptApplication` | Two queries: update application, maybe update shift | **Single RPC** in transaction; reject if shift full or not `open` |
+| `acceptApplication` | ✅ Done — `accept_application` RPC (migration 0003): single transaction, `FOR UPDATE` on shift, ownership + capacity checks | — |
 | Duplicate apply guard | `unique (shift_id, worker_id)` + handle conflict | Keep constraint; RPC returns friendly error |
 | Concurrent accepts (race) | Acceptable for MVP demo | RPC locks shift row; check `required_workers` vs accepted count atomically |
 | `getData()` full snapshot | Multiple selects in repository | Optional: one RPC returning JSON snapshot for SSR |
 
-### Recommended future RPCs
+### RPCs
 
-| RPC | Responsibility |
-|-----|----------------|
-| `apply_to_shift(shift_id, message?)` | Insert application, bump `applicant_count`, enforce shift `open` |
-| `accept_application(application_id)` | Accept one worker, auto-`matched` when quota met, optional auto-reject others |
-| `reject_application(application_id)` | Set rejected |
-| `publish_shift(...)` | Insert shift with validation |
+| RPC | Status | Responsibility |
+|-----|--------|----------------|
+| `accept_application(p_application_id)` | ✅ Implemented (migration 0003) | Lock shift `FOR UPDATE`, verify owner, accept one worker, auto-`matched` when quota met. `SECURITY INVOKER`. |
+| `apply_to_shift(shift_id, message?)` | Future | Insert application, enforce shift `open` (applicant_count already handled by trigger 0001) |
+| `reject_application(application_id)` | Future | Set rejected (currently repository-side) |
+| `publish_shift(...)` | Future | Insert shift with validation |
 
 ## Applying the schema
 

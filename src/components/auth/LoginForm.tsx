@@ -1,16 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button, LinkButton } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { login } from "@/lib/auth/auth-service";
 
+/** Only allow same-site absolute paths as a post-login redirect target. */
+function safeRedirect(path: string | null): string | null {
+  if (!path || !path.startsWith("/") || path.startsWith("//")) return null;
+  return path;
+}
+
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refresh } = useBubanGoData();
+
+  const redirectTarget = safeRedirect(searchParams.get("redirect"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +35,10 @@ export function LoginForm() {
       const { role } = await login(email.trim(), password);
       await refresh();
 
-      if (role === "shop") {
+      // Honor ?redirect= first; otherwise route by role.
+      if (redirectTarget) {
+        router.push(redirectTarget);
+      } else if (role === "shop") {
         router.push("/store");
       } else if (role === "worker") {
         router.push("/shifts");
@@ -42,6 +54,7 @@ export function LoginForm() {
 
   return (
     <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      {redirectTarget && <Alert variant="info">請先登入後繼續</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
 
       <Input

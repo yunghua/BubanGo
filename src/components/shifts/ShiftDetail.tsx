@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import {
@@ -67,6 +67,19 @@ export function ShiftDetail({ shiftId }: ShiftDetailProps) {
   }
 
   function renderActionButton(currentShift: NonNullable<typeof shift>) {
+    // Not signed in: send them to login and back here to apply.
+    if (!data.session.userId && currentShift.status === "open") {
+      return (
+        <LinkButton
+          href={`/auth/login?redirect=/shifts/${shiftId}`}
+          fullWidth
+          size="lg"
+        >
+          登入後申請
+        </LinkButton>
+      );
+    }
+
     if (existingApplication) {
       const label =
         existingApplication.status === "accepted"

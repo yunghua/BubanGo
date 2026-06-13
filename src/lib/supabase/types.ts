@@ -193,7 +193,20 @@ export interface Database {
       };
     };
     Views: Record<never, never>;
-    Functions: Record<never, never>;
+    Functions: {
+      /** Atomic accept (migration 0003). Returns a stable JSON result payload. */
+      accept_application: {
+        Args: { p_application_id: string };
+        Returns: {
+          application_id: string;
+          shift_id: string;
+          application_status: string;
+          shift_status: string;
+          accepted_count: number;
+          required_workers: number;
+        };
+      };
+    };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;
   };

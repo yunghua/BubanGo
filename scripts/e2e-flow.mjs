@@ -32,6 +32,7 @@ const PASSWORD = "BubanGo-test-1234";
 // Use a domain with MX records — GoTrue rejects example.com etc. as invalid.
 const shopEmail = `bubango.test.shop.${stamp}@gmail.com`;
 const workerEmail = `bubango.test.worker.${stamp}@gmail.com`;
+const worker2Email = `bubango.test.worker2.${stamp}@gmail.com`;
 
 let passed = 0;
 let failed = 0;
@@ -200,20 +201,17 @@ async function main() {
   const shopSeesApp = shopApps.data.some((a) => a.id === applicationId);
   check("8. 店家看到申請者 (RLS：店主可讀自家缺班的申請)", shopSeesApp, `${shopApps.data.length} 筆申請`);
 
-  // --- 9. Shop accepts ----------------------------------------------------
-  const accept = await shop.from("applications").update({ status: "accepted" }).eq("id", applicationId).select("id, status").single();
-  if (accept.error) return fail("9. 店家接受申請 (RLS：店主 update)", accept.error);
-  // recompute shift status (required_workers = 1, accepted = 1 → matched)
-  const acceptedCount = await shop
-    .from("applications")
-    .select("id", { count: "exact", head: true })
-    .eq("shift_id", shiftId)
-    .eq("status", "accepted");
-  if (acceptedCount.count >= 1) {
-    const toMatched = await shop.from("shifts").update({ status: "matched" }).eq("id", shiftId).select("status").single();
-    if (toMatched.error) return fail("9. 更新缺班為 matched", toMatched.error);
+  // --- 9. Shop accepts via accept_application RPC (atomic, migration 0003) -
+  const accept = await shop.rpc("accept_application", { p_application_id: applicationId });
+  if (accept.error) {
+    if (isMissingRpc(accept.error)) {
+      check("9. accept_application RPC", false, "找不到 RPC → 請先在 Supabase SQL Editor 執行 0003_accept_application_rpc.sql");
+      return finish();
+    }
+    return fail("9. 店家接受申請 (RPC accept_application)", accept.error);
   }
-  check("9. 店家接受申請 → 缺班 matched", accept.data.status === "accepted");
+  check("9. 店家接受申請 (RPC accept_application)", accept.data?.application_status === "accepted");
+  check("   RPC 回傳 shift_status = matched (required=1)", accept.data?.shift_status === "matched", `accepted_count=${accept.data?.accepted_count}`);
 
   // --- 10. Worker sees acceptance ----------------------------------------
   const myApps = await worker.from("applications").select("id, status").eq("worker_id", workerId);
@@ -227,7 +225,107 @@ async function main() {
   const goneFromOpen = !browse2.data.some((s) => s.id === shiftId);
   check("11. 已媒合缺班不再出現在 open 缺班列表", goneFromOpen);
 
+  // ======================================================================
+  // RPC race-protection tests (accept_application, migration 0003)
+  // Separate shift with required_workers = 1 and two competing applicants.
+  // ======================================================================
+
+  // 12. second worker registers (0002 trigger creates the worker row)
+  const worker2 = newClient();
+  const w2 = await worker2.auth.signUp({
+    email: worker2Email,
+    password: PASSWORD,
+    options: { data: { role: "worker", display_name: "驗收打工者2", phone: "0987-000-003" } },
+  });
+  if (w2.error) return fail("12. 第二位打工者註冊", w2.error);
+  if (!w2.data.session) {
+    check("12. 第二位打工者註冊 (session)", false, "email confirmation enabled");
+    return finish();
+  }
+  let workerId2;
+  const exW2 = await worker2.from("workers").select("id").eq("user_id", w2.data.user.id).limit(1).maybeSingle();
+  if (exW2.error) return fail("12. 讀取 worker2", exW2.error);
+  if (exW2.data) {
+    workerId2 = exW2.data.id;
+  } else {
+    const ins = await worker2.from("workers").insert({ user_id: w2.data.user.id, name: "驗收打工者2", phone: "0987-000-003" }).select("id").single();
+    if (ins.error) return fail("12. 建立 worker2", ins.error);
+    workerId2 = ins.data.id;
+  }
+  check("12. 第二位打工者就緒", true, `workerId2=${workerId2.slice(0, 8)}…`);
+
+  // 13. shop publishes a second shift (required_workers = 1)
+  const shift2 = await shop
+    .from("shifts")
+    .insert({
+      shop_id: shopId,
+      title: "台北市測試路 2 號",
+      date: "2026-07-02",
+      start_time: "10:00",
+      end_time: "13:00",
+      hourly_wage: 210,
+      required_workers: 1,
+      description: "RPC 競態測試用班次",
+      status: "open",
+      applicant_count: 0,
+    })
+    .select("id")
+    .single();
+  if (shift2.error) return fail("13. 發布第二個缺班", shift2.error);
+  const shiftId2 = shift2.data.id;
+  check("13. 發布第二個缺班 (required_workers=1)", true, `shiftId2=${shiftId2.slice(0, 8)}…`);
+
+  // 14. both workers apply to shift2
+  const a1 = await worker.from("applications").insert({ shift_id: shiftId2, worker_id: workerId, status: "pending" }).select("id").single();
+  const a2 = await worker2.from("applications").insert({ shift_id: shiftId2, worker_id: workerId2, status: "pending" }).select("id").single();
+  if (a1.error) return fail("14. worker1 申請 shift2", a1.error);
+  if (a2.error) return fail("14. worker2 申請 shift2", a2.error);
+  const appId1 = a1.data.id;
+  const appId2 = a2.data.id;
+  check("14. 兩位打工者都申請 shift2", true, "2 筆 pending");
+
+  // 15. non-owner cannot accept (a worker calls the RPC on their own application)
+  const nonOwner = await worker.rpc("accept_application", { p_application_id: appId1 });
+  check(
+    "15. 非店主無法 accept (not_shift_owner)",
+    !!nonOwner.error && (nonOwner.error.message ?? "").includes("not_shift_owner"),
+    nonOwner.error?.message ?? "（不應成功）"
+  );
+
+  // 16. race: owner fires accept for BOTH pending apps at the same time
+  const [r1, r2] = await Promise.all([
+    shop.rpc("accept_application", { p_application_id: appId1 }),
+    shop.rpc("accept_application", { p_application_id: appId2 }),
+  ]);
+  if (isMissingRpc(r1.error) || isMissingRpc(r2.error)) {
+    check("16. 並發 accept", false, "找不到 RPC → 請先執行 0003_accept_application_rpc.sql");
+    return finish();
+  }
+  const oks = [r1, r2].filter((r) => !r.error).length;
+  const errs = [r1, r2].filter((r) => r.error).length;
+  check("16. 並發 accept：恰好 1 成功 1 失敗 (FOR UPDATE 序列化)", oks === 1 && errs === 1, `成功 ${oks} / 失敗 ${errs}`);
+
+  const accCount = await shop.from("applications").select("id", { count: "exact", head: true }).eq("shift_id", shiftId2).eq("status", "accepted");
+  check("   shift2 最終 accepted 數 = 1（未超收 required_workers）", accCount.count === 1, `accepted=${accCount.count}`);
+  const s2 = await shop.from("shifts").select("status").eq("id", shiftId2).single();
+  check("   shift2 狀態 = matched", s2.data?.status === "matched");
+
+  // 17. accepting the application that lost the race fails (shift now full)
+  const pendingAppId = r1.error ? appId1 : appId2;
+  const afterFull = await shop.rpc("accept_application", { p_application_id: pendingAppId });
+  check(
+    "17. 額滿後再 accept 仍失敗 (shift_not_open / shift_already_full)",
+    !!afterFull.error,
+    afterFull.error?.message ?? "（不應成功）"
+  );
+
   finish();
+}
+
+function isMissingRpc(error) {
+  if (!error) return false;
+  const msg = error.message ?? "";
+  return error.code === "PGRST202" || msg.includes("Could not find the function") || msg.includes("does not exist");
 }
 
 function fail(label, error) {
@@ -237,7 +335,7 @@ function fail(label, error) {
 
 function finish() {
   console.log(`\n———\n結果：${passed} passed, ${failed} failed`);
-  console.log(`🧹 測試帳號（可在 Supabase Dashboard → Authentication 刪除）：\n   ${shopEmail}\n   ${workerEmail}`);
+  console.log(`🧹 測試帳號（可在 Supabase Dashboard → Authentication 刪除，會連帶 cascade 清掉資料）：\n   ${shopEmail}\n   ${workerEmail}\n   ${worker2Email}`);
   process.exitCode = failed === 0 ? 0 : 2;
 }
 

@@ -59,9 +59,11 @@ Or programmatically: `localStorageRepository.reset()`.
 | `getApplicationsByWorker(workerId)` | Worker's application history |
 | `getApplicationsByShift(shiftId)` | Applicants for a shift (store review) |
 | `applyToShift(shiftId, workerId)` | Worker applies; creates `pending` application |
-| `acceptApplication(id)` | Store accepts; may set shift → `matched` |
+| `acceptApplication(id)` | Store accepts; may set shift → `matched`. **Supabase backend: atomic via the `accept_application` RPC (migration 0003)** — locks the shift `FOR UPDATE` so concurrent accepts can't exceed `required_workers`. |
 | `rejectApplication(id)` | Store rejects; application → `rejected` |
 | `getCurrentSession()` | Current shop/worker IDs (stand-in for auth) |
+
+> **Note (Supabase):** `acceptApplication` is the one mutation that runs as a database function (`public.accept_application`) rather than table writes from the client, to make the accept + capacity check + `matched` flip atomic. It is `SECURITY INVOKER`, so RLS still governs what the caller can touch. All other methods are plain RLS-scoped table queries.
 
 ## Switching to Supabase
 
