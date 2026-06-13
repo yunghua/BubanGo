@@ -58,12 +58,16 @@ Or programmatically: `localStorageRepository.reset()`.
 | `getApplications()` | List all applications |
 | `getApplicationsByWorker(workerId)` | Worker's application history |
 | `getApplicationsByShift(shiftId)` | Applicants for a shift (store review) |
-| `applyToShift(shiftId, workerId)` | Worker applies; creates `pending` application |
+| `applyToShift(shiftId, workerId)` | Worker applies; creates `pending` application. **Supabase backend: atomic via the `apply_to_shift` RPC (migration 0004)** — derives the worker from `auth.uid()` (the `workerId` arg is ignored in Supabase mode), locks the shift `FOR UPDATE`, enforces role/open/full/duplicate. |
 | `acceptApplication(id)` | Store accepts; may set shift → `matched`. **Supabase backend: atomic via the `accept_application` RPC (migration 0003)** — locks the shift `FOR UPDATE` so concurrent accepts can't exceed `required_workers`. |
 | `rejectApplication(id)` | Store rejects; application → `rejected` |
 | `getCurrentSession()` | Current shop/worker IDs (stand-in for auth) |
 
-> **Note (Supabase):** `acceptApplication` is the one mutation that runs as a database function (`public.accept_application`) rather than table writes from the client, to make the accept + capacity check + `matched` flip atomic. It is `SECURITY INVOKER`, so RLS still governs what the caller can touch. All other methods are plain RLS-scoped table queries.
+> **Note (Supabase):** two mutations run as database functions rather than client table writes, to be atomic and race-free:
+> - `acceptApplication` → `public.accept_application` (`SECURITY INVOKER`; the owner already has the RLS privileges, so it only adds atomicity).
+> - `applyToShift` → `public.apply_to_shift` (`SECURITY DEFINER`; a worker must lock a shift it doesn't own, so RLS privileges are insufficient — identity/role are validated explicitly instead, and the worker is derived from `auth.uid()`).
+>
+> All other methods are plain RLS-scoped table queries. `rejectApplication` is still repository-side.
 
 ## Switching to Supabase
 

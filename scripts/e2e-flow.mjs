@@ -171,29 +171,54 @@ async function main() {
   const sees = browse.data.some((s) => s.id === shiftId);
   check("6. 打工者瀏覽缺班 (看得到 open 缺班)", sees, `open 缺班 ${browse.data.length} 筆`);
 
-  // --- 7. Worker applies --------------------------------------------------
-  const apply = await worker
-    .from("applications")
-    .insert({ shift_id: shiftId, worker_id: workerId, status: "pending" })
-    .select("id, status")
-    .single();
-  if (apply.error) return fail("7. 打工者申請缺班 (applications insert, RLS)", apply.error);
-  const applicationId = apply.data.id;
-  check("7. 打工者申請缺班", apply.data.status === "pending", `applicationId=${applicationId.slice(0, 8)}…`);
+  // --- 7. Worker applies via apply_to_shift RPC (atomic, migration 0004) --
+  const apply = await worker.rpc("apply_to_shift", { p_shift_id: shiftId });
+  if (apply.error) {
+    if (isMissingRpc(apply.error)) {
+      check("7. apply_to_shift RPC", false, "找不到 RPC → 請先在 Supabase SQL Editor 執行 0004_apply_to_shift_rpc.sql");
+      return finish();
+    }
+    return fail("7. 打工者申請缺班 (RPC apply_to_shift)", apply.error);
+  }
+  const applicationId = apply.data.application_id;
+  check("7. 打工者申請缺班 (RPC apply_to_shift)", apply.data.status === "pending", `applicationId=${applicationId.slice(0, 8)}…`);
 
-  // 7b. applicant_count trigger
+  // 7b. applicant_count trigger still bumps on the RPC's INSERT
   const afterApply = await shop.from("shifts").select("applicant_count").eq("id", shiftId).single();
-  const countOk = !afterApply.error && afterApply.data.applicant_count === 1;
   check(
-    "   applicant_count trigger 已 +1",
-    countOk,
-    afterApply.error ? afterApply.error.message : `applicant_count=${afterApply.data.applicant_count}（0 表示尚未套用 0001 migration）`
+    "   applicant_count trigger 已 +1（RPC insert 觸發）",
+    !afterApply.error && afterApply.data.applicant_count === 1,
+    afterApply.error ? afterApply.error.message : `applicant_count=${afterApply.data.applicant_count}`
   );
 
-  // 7c. RLS: worker must NOT be able to update the shift row
+  // 7c. RLS: worker still cannot directly update the shift row
   const workerUpdateShift = await worker.from("shifts").update({ status: "cancelled" }).eq("id", shiftId).select("id");
-  const blocked = !workerUpdateShift.error && (workerUpdateShift.data?.length ?? 0) === 0;
-  check("   RLS：打工者無法竄改 shifts（0 rows updated）", blocked);
+  check("   RLS：打工者無法竄改 shifts（0 rows updated）", !workerUpdateShift.error && (workerUpdateShift.data?.length ?? 0) === 0);
+
+  // 7d. shop owner cannot apply (not_worker)
+  const ownerApply = await shop.rpc("apply_to_shift", { p_shift_id: shiftId });
+  check(
+    "   店主無法申請 (not_worker)",
+    !!ownerApply.error && (ownerApply.error.message ?? "").includes("not_worker"),
+    ownerApply.error?.message ?? "（不應成功）"
+  );
+
+  // 7e. duplicate apply by the same worker fails (already_applied)
+  const dupApply = await worker.rpc("apply_to_shift", { p_shift_id: shiftId });
+  check(
+    "   重複申請被擋 (already_applied)",
+    !!dupApply.error && (dupApply.error.message ?? "").includes("already_applied"),
+    dupApply.error?.message ?? "（不應成功）"
+  );
+
+  // 7f. unauthenticated (anon) user cannot apply
+  const anon = newClient();
+  const anonApply = await anon.rpc("apply_to_shift", { p_shift_id: shiftId });
+  check(
+    "   未登入無法申請 (RPC 拒絕)",
+    !!anonApply.error,
+    anonApply.error ? `${anonApply.error.code ?? ""} ${anonApply.error.message ?? ""}`.trim() : "（不應成功）"
+  );
 
   // --- 8. Shop sees the applicant ----------------------------------------
   const shopApps = await shop.from("applications").select("id, worker_id, status").eq("shift_id", shiftId);
@@ -254,6 +279,14 @@ async function main() {
   }
   check("12. 第二位打工者就緒", true, `workerId2=${workerId2.slice(0, 8)}…`);
 
+  // 12b. applying to the already-matched shift1 fails (shift_not_open)
+  const applyMatched = await worker2.rpc("apply_to_shift", { p_shift_id: shiftId });
+  check(
+    "   申請已 matched 的缺班被擋 (shift_not_open)",
+    !!applyMatched.error && (applyMatched.error.message ?? "").includes("shift_not_open"),
+    applyMatched.error?.message ?? "（不應成功）"
+  );
+
   // 13. shop publishes a second shift (required_workers = 1)
   const shift2 = await shop
     .from("shifts")
@@ -275,14 +308,14 @@ async function main() {
   const shiftId2 = shift2.data.id;
   check("13. 發布第二個缺班 (required_workers=1)", true, `shiftId2=${shiftId2.slice(0, 8)}…`);
 
-  // 14. both workers apply to shift2
-  const a1 = await worker.from("applications").insert({ shift_id: shiftId2, worker_id: workerId, status: "pending" }).select("id").single();
-  const a2 = await worker2.from("applications").insert({ shift_id: shiftId2, worker_id: workerId2, status: "pending" }).select("id").single();
-  if (a1.error) return fail("14. worker1 申請 shift2", a1.error);
-  if (a2.error) return fail("14. worker2 申請 shift2", a2.error);
-  const appId1 = a1.data.id;
-  const appId2 = a2.data.id;
-  check("14. 兩位打工者都申請 shift2", true, "2 筆 pending");
+  // 14. both workers apply to shift2 via the apply_to_shift RPC
+  const a1 = await worker.rpc("apply_to_shift", { p_shift_id: shiftId2 });
+  const a2 = await worker2.rpc("apply_to_shift", { p_shift_id: shiftId2 });
+  if (a1.error) return fail("14. worker1 申請 shift2 (RPC)", a1.error);
+  if (a2.error) return fail("14. worker2 申請 shift2 (RPC)", a2.error);
+  const appId1 = a1.data.application_id;
+  const appId2 = a2.data.application_id;
+  check("14. 兩位打工者都用 RPC 申請 shift2", true, "2 筆 pending");
 
   // 15. non-owner cannot accept (a worker calls the RPC on their own application)
   const nonOwner = await worker.rpc("accept_application", { p_application_id: appId1 });

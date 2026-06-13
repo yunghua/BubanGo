@@ -121,5 +121,6 @@ end;
 $$;
 
 -- Least privilege: only logged-in users may call it (RLS still applies inside).
-revoke all on function public.accept_application(uuid) from public;
+-- Supabase grants EXECUTE to `anon` directly, so revoke from anon explicitly.
+revoke all on function public.accept_application(uuid) from public, anon;
 grant execute on function public.accept_application(uuid) to authenticated;

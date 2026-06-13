@@ -206,6 +206,17 @@ export interface Database {
           required_workers: number;
         };
       };
+      /** Atomic apply (migration 0004). Worker derived from auth.uid(). */
+      apply_to_shift: {
+        Args: { p_shift_id: string };
+        Returns: {
+          application_id: string;
+          shift_id: string;
+          worker_id: string;
+          status: string;
+          created_at: string;
+        };
+      };
     };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;

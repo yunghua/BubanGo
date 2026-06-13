@@ -2,9 +2,13 @@
 
 This document describes the PostgreSQL schema in [`supabase/schema.sql`](../supabase/schema.sql). It is the live data model for `SupabaseRepository`, which is now the **default** backend (`NEXT_PUBLIC_DATA_BACKEND=supabase`). `localStorageRepository` remains a dev fallback (`=local`).
 
-> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql` → `supabase/migrations/0003_accept_application_rpc.sql`.
+> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql` → `supabase/migrations/0003_accept_application_rpc.sql` → `supabase/migrations/0004_apply_to_shift_rpc.sql`.
 >
-> **`acceptApplication` is now an RPC.** `SupabaseRepository.acceptApplication()` calls the `public.accept_application(p_application_id uuid)` function (migration 0003) instead of a read-then-write pair. The function locks the `shifts` row `FOR UPDATE` and does the ownership check, capacity check, accept, and `matched` flip in one transaction — eliminating the concurrent-accept race. It is `SECURITY INVOKER`, so RLS still applies; it only adds atomicity, not privilege. `rejectApplication` is unchanged (still repository-side).
+> **`acceptApplication` and `applyToShift` are now RPCs.**
+> - `acceptApplication()` → `public.accept_application(p_application_id uuid)` (migration 0003). Locks the `shifts` row `FOR UPDATE`; ownership + capacity check + accept + `matched` flip in one transaction. **`SECURITY INVOKER`** — the owner already has the needed RLS privileges, so it only adds atomicity.
+> - `applyToShift()` → `public.apply_to_shift(p_shift_id uuid)` (migration 0004). Derives the worker from `auth.uid()` (ignores any client-passed id), locks the shift `FOR UPDATE`, enforces role/open/full/duplicate. **`SECURITY DEFINER`** — a worker must lock a shift it doesn't own, which exceeds the worker's RLS write privileges; the security intent is re-implemented as explicit checks (auth + role + worker-from-auth).
+>
+> `rejectApplication` is unchanged (still repository-side).
 >
 > **Implementation note — `location` ↔ `title`:** the app stores the shift location string in the `shifts.title` column (no separate `location` column in the MVP). `hourly_wage`, `required_workers`, `applicant_count` map to `hourlyRate`, `requiredWorkers`, `applicantCount`. Conversions live in `src/lib/data/mappers.ts`.
 
@@ -130,7 +134,7 @@ required_workers: input.requiredWorkers
 | `getApplications()` | `applications`, `workers` | Admin/debug; scope by RLS in practice |
 | `getApplicationsByWorker(workerId)` | `applications`, `workers` | `WHERE worker_id = $id` |
 | `getApplicationsByShift(shiftId)` | `applications`, `workers` | `WHERE shift_id = $id` |
-| `applyToShift(shiftId, workerId)` | `applications`, `shifts` | `INSERT` + increment `applicant_count` (MVP) |
+| `applyToShift(shiftId, workerId)` | `applications`, `shifts` | `apply_to_shift` RPC (migration 0004): worker from `auth.uid()`, lock shift `FOR UPDATE`, insert pending. `workerId` arg ignored in Supabase mode. |
 | `acceptApplication(id)` | `applications`, `shifts` | Update status; set shift `matched` when accepted count ≥ `required_workers` |
 | `rejectApplication(id)` | `applications` | `UPDATE status = 'rejected'` |
 
@@ -207,7 +211,7 @@ Only after manual QA, change `get-repository.ts` to return `supabaseRepository`.
 | RPC | Status | Responsibility |
 |-----|--------|----------------|
 | `accept_application(p_application_id)` | ✅ Implemented (migration 0003) | Lock shift `FOR UPDATE`, verify owner, accept one worker, auto-`matched` when quota met. `SECURITY INVOKER`. |
-| `apply_to_shift(shift_id, message?)` | Future | Insert application, enforce shift `open` (applicant_count already handled by trigger 0001) |
+| `apply_to_shift(p_shift_id)` | ✅ Implemented (migration 0004) | Derive worker from `auth.uid()`, lock shift `FOR UPDATE`, enforce role/open/full/duplicate, insert pending application. `SECURITY DEFINER`. |
 | `reject_application(application_id)` | Future | Set rejected (currently repository-side) |
 | `publish_shift(...)` | Future | Insert shift with validation |
 

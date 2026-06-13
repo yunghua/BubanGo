@@ -35,6 +35,19 @@ function translateAcceptError(message: string): string {
   return `操作失敗：${m}`;
 }
 
+/** Map apply_to_shift RPC error codes (raised as messages) to UI text. */
+function translateApplyError(message: string): string {
+  const m = message ?? "";
+  if (m.includes("not_authenticated")) return "請先登入後再申請";
+  if (m.includes("not_worker")) return "只有打工者帳號可以申請缺班";
+  if (m.includes("worker_not_found")) return "找不到打工者資料，請先完成註冊";
+  if (m.includes("shift_not_found")) return "找不到此缺班";
+  if (m.includes("shift_not_open")) return "此缺班目前無法申請";
+  if (m.includes("shift_already_full")) return "此缺班已額滿";
+  if (m.includes("already_applied")) return "你已申請過此缺班";
+  return `申請失敗：${m}`;
+}
+
 /**
  * Supabase-backed implementation of {@link BubanGoRepository}.
  *
@@ -279,44 +292,46 @@ export class SupabaseRepository implements BubanGoRepository {
     return this.attachWorkers(data);
   }
 
+  /**
+   * Apply to a shift atomically via the `apply_to_shift` RPC (migration 0004).
+   * The function derives the worker from `auth.uid()`, locks the shift FOR
+   * UPDATE, and enforces role/open/full/duplicate rules in one transaction.
+   *
+   * The `workerId` argument is intentionally ignored in Supabase mode — identity
+   * comes from the auth session, never from the caller. It is kept only to match
+   * the interface (the localStorage fallback still uses it).
+   */
   async applyToShift(shiftId: string, workerId: string): Promise<Application> {
+    void workerId; // Supabase derives the worker from auth.uid().
     const supabase = this.client;
 
-    // Guard: shift must exist and still be open.
-    const { data: shift, error: shiftError } = await supabase
-      .from("shifts")
-      .select("id, status")
-      .eq("id", shiftId)
-      .maybeSingle();
-
-    if (shiftError) throw new Error(`讀取缺班失敗：${shiftError.message}`);
-    if (!shift) throw new Error("找不到此缺班");
-    if (shift.status !== "open") throw new Error("此缺班目前無法申請");
-
-    const { data: row, error } = await supabase
-      .from("applications")
-      .insert({ shift_id: shiftId, worker_id: workerId, status: "pending" })
-      .select("*")
-      .single();
+    const { data, error } = await supabase.rpc("apply_to_shift", {
+      p_shift_id: shiftId,
+    });
 
     if (error) {
-      // 23505 = unique_violation on (shift_id, worker_id).
-      if (error.code === "23505") {
-        throw new Error("你已申請過此缺班");
-      }
-      throw new Error(`申請失敗：${error.message}`);
+      throw new Error(translateApplyError(error.message));
+    }
+    if (!data) {
+      throw new Error("申請失敗，請稍後再試");
     }
 
-    // applicant_count is maintained by a DB trigger (sync_applicant_count) so it
-    // stays correct even though workers cannot UPDATE shifts under RLS.
-
+    // applicant_count is maintained by the DB trigger (migration 0001) on insert.
     const { data: worker } = await supabase
       .from("workers")
       .select("name, phone")
-      .eq("id", workerId)
+      .eq("id", data.worker_id)
       .maybeSingle();
 
-    return mapApplicationRow(row, worker ?? null);
+    return {
+      id: data.application_id,
+      shiftId: data.shift_id,
+      workerId: data.worker_id,
+      workerName: worker?.name ?? "",
+      workerPhone: worker?.phone ?? "",
+      status: "pending",
+      appliedAt: data.created_at,
+    };
   }
 
   /**
