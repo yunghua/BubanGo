@@ -61,16 +61,7 @@ async function main() {
     return finish();
   }
   if (!shopSignUp.data.session) {
-    console.log(
-      "\n⚠️  店家 signUp 沒有回傳 session → 專案開啟了 Email 確認（Confirm email）。\n" +
-        "   這支自動化腳本無法替使用者點確認信，因此無法跑完閉環。\n" +
-        "   兩種驗收方式：\n" +
-        "   (A) 保留確認 + 已安裝 0002 trigger → 改用瀏覽器流程驗收\n" +
-        "       （測試時可在 Supabase → Authentication → Users 手動把使用者設為已確認）。\n" +
-        "   (B) 想要一鍵自動全綠 → 暫時關閉 Confirm email 後重跑本腳本，再開回來。\n"
-    );
-    check("1. 店家註冊 (signUp 取得 session)", false, "email confirmation enabled");
-    return finish();
+    return confirmationEnabledExit("步驟 1 店家 signUp", [shopEmail]);
   }
   const shopUserId = shopSignUp.data.user.id;
   check("1. 店家註冊 (signUp + session)", true, `uid=${shopUserId.slice(0, 8)}…`);
@@ -134,8 +125,7 @@ async function main() {
   });
   if (workerSignUp.error) return fail("4. 打工者註冊 (signUp)", workerSignUp.error);
   if (!workerSignUp.data.session) {
-    check("4. 打工者註冊 (signUp 取得 session)", false, "email confirmation enabled");
-    return finish();
+    return confirmationEnabledExit("步驟 4 打工者 signUp", [shopEmail, workerEmail]);
   }
   const workerUserId = workerSignUp.data.user.id;
   check("4. 打工者註冊", true, `uid=${workerUserId.slice(0, 8)}…`);
@@ -264,8 +254,7 @@ async function main() {
   });
   if (w2.error) return fail("12. 第二位打工者註冊", w2.error);
   if (!w2.data.session) {
-    check("12. 第二位打工者註冊 (session)", false, "email confirmation enabled");
-    return finish();
+    return confirmationEnabledExit("步驟 12 第二位打工者 signUp", [shopEmail, workerEmail, worker2Email]);
   }
   let workerId2;
   const exW2 = await worker2.from("workers").select("id").eq("user_id", w2.data.user.id).limit(1).maybeSingle();
@@ -370,6 +359,28 @@ function finish() {
   console.log(`\n———\n結果：${passed} passed, ${failed} failed`);
   console.log(`🧹 測試帳號（可在 Supabase Dashboard → Authentication 刪除，會連帶 cascade 清掉資料）：\n   ${shopEmail}\n   ${workerEmail}\n   ${worker2Email}`);
   process.exitCode = failed === 0 ? 0 : 2;
+}
+
+/**
+ * Email Confirmation is ON → signUp returns no session, so the automated loop
+ * can't run (we intentionally never touch an email inbox). This is a SKIP, not a
+ * failure: it does not increment `failed` and exits 0.
+ */
+function confirmationEnabledExit(stageLabel, createdEmails) {
+  console.log(
+    `\n⏭️  e2e SKIPPED（這不是失敗）：在「${stageLabel}」偵測到 Email Confirmation 已開啟。\n` +
+      `   signUp 不會立即回傳 session，本腳本刻意不依賴信箱、不會去點確認信，\n` +
+      `   因此無法自動跑完整補班閉環。\n\n` +
+      `   ▸ 正式機（confirmation ON）請改用手動 QA：docs/EMAIL_CONFIRMATION_QA.md（§4）\n` +
+      `   ▸ 想要自動化全綠：暫時關閉 Confirm email → 重跑本腳本 → 再開回來（§3）\n`
+  );
+  console.log(`———\n結果：⏭️  SKIPPED（Email Confirmation enabled）— ${passed} passed, ${failed} failed, 0 errors`);
+  if (createdEmails?.length) {
+    console.log(
+      `🧹 已建立的未確認測試帳號（可在 Authentication → Users 刪除）：\n   ${createdEmails.join("\n   ")}`
+    );
+  }
+  process.exitCode = 0; // skip, not failure
 }
 
 main().catch((e) => {
