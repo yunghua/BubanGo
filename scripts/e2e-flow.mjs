@@ -341,6 +341,60 @@ async function main() {
     afterFull.error?.message ?? "（不應成功）"
   );
 
+  // ======================================================================
+  // Onboarding fallback idempotency (mirrors ensureShop/WorkerForCurrentUser).
+  // We can't simulate a *missing* row (no RLS DELETE policy to remove the
+  // trigger's row), but we can prove the "row already exists" path UPDATEs
+  // instead of inserting — the key no-duplicate guarantee (items 7 & 8).
+  // ======================================================================
+
+  // 18. ensure-shop on an owner who already has a shop → update, not a 2nd row
+  const exShop2 = await shop.from("shops").select("id").eq("owner_id", shopUserId).order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (exShop2.data) {
+    await shop.from("shops").update({ area: "台北市大安區" }).eq("id", exShop2.data.id);
+  } else {
+    await shop.from("shops").insert({ owner_id: shopUserId, name: "驗收茶飲店", address: "台北市測試路 1 號" });
+  }
+  const shopCount = await shop.from("shops").select("id", { count: "exact", head: true }).eq("owner_id", shopUserId);
+  check("18. onboarding 不會重複建立 shop（仍 1 筆）", shopCount.count === 1, `shops=${shopCount.count}`);
+
+  // 19. same guarantee for the worker row
+  const exWorker2 = await worker.from("workers").select("id").eq("user_id", workerUserId).order("created_at", { ascending: true }).limit(1).maybeSingle();
+  if (exWorker2.data) {
+    await worker.from("workers").update({ area: "台北市大安區" }).eq("id", exWorker2.data.id);
+  } else {
+    await worker.from("workers").insert({ user_id: workerUserId, name: "驗收打工者", phone: "0987-000-002" });
+  }
+  const workerCount = await worker.from("workers").select("id", { count: "exact", head: true }).eq("user_id", workerUserId);
+  check("19. onboarding 不會重複建立 worker（仍 1 筆）", workerCount.count === 1, `workers=${workerCount.count}`);
+
+  // 20-21. DB-level unique constraint (migration 0005). Opt-in via --unique and
+  // only meaningful AFTER 0005 is applied: a direct 2nd insert must be rejected
+  // with 23505. (Skipped by default so a pre-0005 run can't create a duplicate.)
+  if (process.argv.includes("--unique")) {
+    const dupShop = await shop
+      .from("shops")
+      .insert({ owner_id: shopUserId, name: "dup", address: "dup" })
+      .select("id");
+    check(
+      "20. 唯一限制：第二筆 shop 被擋 (23505)",
+      dupShop.error?.code === "23505",
+      dupShop.error?.code ?? "（竟然成功！0005 尚未套用？此筆需刪測試帳號清除）"
+    );
+
+    const dupWorker = await worker
+      .from("workers")
+      .insert({ user_id: workerUserId, name: "dup" })
+      .select("id");
+    check(
+      "21. 唯一限制：第二筆 worker 被擋 (23505)",
+      dupWorker.error?.code === "23505",
+      dupWorker.error?.code ?? "（竟然成功！0005 尚未套用？）"
+    );
+  } else {
+    console.log("ℹ️  （套用 0005 後可加 --unique 旗標，額外驗證唯一限制擋下第二筆 shop/worker）");
+  }
+
   finish();
 }
 

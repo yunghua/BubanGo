@@ -2,7 +2,17 @@
 
 This document describes the PostgreSQL schema in [`supabase/schema.sql`](../supabase/schema.sql). It is the live data model for `SupabaseRepository`, which is now the **default** backend (`NEXT_PUBLIC_DATA_BACKEND=supabase`). `localStorageRepository` remains a dev fallback (`=local`).
 
-> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql` → `supabase/migrations/0003_accept_application_rpc.sql` → `supabase/migrations/0004_apply_to_shift_rpc.sql`.
+> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `0001_applicant_count_trigger.sql` → (if email confirmation stays on) `0002_handle_new_user.sql` → `0003_accept_application_rpc.sql` → `0004_apply_to_shift_rpc.sql` → `0005_unique_shop_worker_owner.sql` (all under `supabase/migrations/`).
+>
+> **One shop per owner / one worker per user (migration 0005).** Unique indexes
+> `shops_owner_id_unique` and `workers_user_id_unique` enforce it at the DB level
+> (the onboarding fallback only enforced it in the UI/service). The migration
+> **detects duplicates and raises** with the offending ids rather than deleting
+> data — clean up manually (delete the extra test users in Authentication → Users,
+> which cascades) and re-run. **Product note:** MVP assumes a single store per
+> owner; `getCurrentSession()` already picks one shop via `limit(1)`. Supporting
+> multiple stores per owner later means dropping these unique indexes and adding a
+> shop-selector + per-shop context.
 >
 > **`acceptApplication` and `applyToShift` are now RPCs.**
 > - `acceptApplication()` → `public.accept_application(p_application_id uuid)` (migration 0003). Locks the `shifts` row `FOR UPDATE`; ownership + capacity check + accept + `matched` flip in one transaction. **`SECURITY INVOKER`** — the owner already has the needed RLS privileges, so it only adds atomicity.

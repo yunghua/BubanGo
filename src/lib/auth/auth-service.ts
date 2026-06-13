@@ -119,7 +119,7 @@ export async function registerWorker(
 export async function login(
   email: string,
   password: string
-): Promise<{ role: UserRole | null }> {
+): Promise<{ role: UserRole | null; needsOnboarding: boolean }> {
   const supabase = getBrowserSupabaseClient();
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -137,9 +137,27 @@ export async function login(
     .maybeSingle();
 
   if (profileError) throw new Error(`讀取個人資料失敗：${profileError.message}`);
-  if (!profile) return { role: null };
+  if (!profile) return { role: null, needsOnboarding: false };
 
-  return { role: profile.role === "shop_owner" ? "shop" : "worker" };
+  // Fallback detection: the user has a role but the 0002 trigger may not have
+  // created their shop/worker row. If it's missing, route them to onboarding.
+  if (profile.role === "shop_owner") {
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("id")
+      .eq("owner_id", data.user.id)
+      .limit(1)
+      .maybeSingle();
+    return { role: "shop", needsOnboarding: !shop };
+  }
+
+  const { data: worker } = await supabase
+    .from("workers")
+    .select("id")
+    .eq("user_id", data.user.id)
+    .limit(1)
+    .maybeSingle();
+  return { role: "worker", needsOnboarding: !worker };
 }
 
 export async function logout(): Promise<void> {

@@ -171,10 +171,12 @@ exists) and `/worker/profile` (worker exists).
    configured **Authentication → URL Configuration → Site URL**. Set it (and any
    additional redirect URLs) to your running app, or the link will 404 / bounce to
    localhost. Not needed for the Dashboard-confirm QA path.
-4. **No post-hoc onboarding UI** — if a row is ever missing (e.g. trigger removed),
-   the user can confirm + log in but lands on an empty *"找不到店家資料"* state with
-   no way to recreate the shop/worker from the UI. Keep the trigger installed; a
-   future enhancement could add a "complete your profile" screen.
+4. **Missing-row fallback exists** — if a row is missing (e.g. trigger removed or
+   incomplete metadata), login routes the user to `/onboarding/shop` or
+   `/onboarding/worker` to create it (and `/store` / `/worker/profile` empty states
+   link there too). Migration **0005** enforces one shop per owner / one worker per
+   user at the DB level, so the fallback can't create duplicates. Keeping the
+   `0002` trigger installed is still preferred so most users never see onboarding.
 5. **`address` may be empty for shops** — the shop form collects address, so it is
    normally present in metadata; but the trigger coalesces a missing address to
    `''`. Owners can fix it in `/store/settings`.

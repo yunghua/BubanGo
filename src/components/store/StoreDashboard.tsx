@@ -20,7 +20,14 @@ export function StoreDashboard() {
   );
 
   if (!currentShop) {
-    return <p className="text-sm text-text-muted">找不到店家資料</p>;
+    return (
+      <div className="py-12 text-center">
+        <p className="text-text-muted">還沒有店家資料</p>
+        <LinkButton href="/onboarding/shop" className="mt-4">
+          完成店家設定
+        </LinkButton>
+      </div>
+    );
   }
 
   const shifts = data.shifts.filter((shift) => shift.shopId === currentShop.id);

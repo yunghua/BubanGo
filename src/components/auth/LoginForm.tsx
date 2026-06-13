@@ -32,16 +32,14 @@ export function LoginForm() {
     setSubmitting(true);
 
     try {
-      const { role } = await login(email.trim(), password);
+      const { role, needsOnboarding } = await login(email.trim(), password);
       await refresh();
 
-      // Honor ?redirect= first; otherwise route by role.
-      if (redirectTarget) {
-        router.push(redirectTarget);
-      } else if (role === "shop") {
-        router.push("/store");
+      if (role === "shop") {
+        // Missing shop row (e.g. trigger didn't run) → finish setup first.
+        router.push(needsOnboarding ? "/onboarding/shop" : (redirectTarget ?? "/store"));
       } else if (role === "worker") {
-        router.push("/shifts");
+        router.push(needsOnboarding ? "/onboarding/worker" : (redirectTarget ?? "/shifts"));
       } else {
         setError("找不到帳號角色資料，請重新註冊或聯絡客服。");
         setSubmitting(false);

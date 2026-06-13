@@ -10,6 +10,8 @@ import { getSupabaseEnv } from "@/lib/supabase/env";
  * - Role mismatch is bounced to the correct home (worker→/shifts, owner→/store).
  * - Signed-in users hitting /auth/login or /auth/register are bounced to their
  *   role home (a logged-in user has no reason to see those pages).
+ * - /onboarding/{shop,worker} require auth and are role-gated, but the matching
+ *   role is allowed in even with a missing shop/worker row (the fallback flow).
  * - Role comes from `user.user_metadata.role` (set at sign-up), so no extra DB
  *   round-trip and no RLS dependency.
  * - Dev bypass: with NEXT_PUBLIC_DATA_BACKEND=local there is no Supabase session,
@@ -21,6 +23,7 @@ import { getSupabaseEnv } from "@/lib/supabase/env";
 
 const PROTECTED_PREFIXES = ["/store", "/worker"] as const;
 const AUTH_ROUTES = ["/auth/login", "/auth/register"] as const;
+const ONBOARDING_ROUTES = ["/onboarding/shop", "/onboarding/worker"] as const;
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some(
@@ -30,6 +33,10 @@ function isProtected(pathname: string): boolean {
 
 function isAuthRoute(pathname: string): boolean {
   return (AUTH_ROUTES as readonly string[]).includes(pathname);
+}
+
+function isOnboardingRoute(pathname: string): boolean {
+  return (ONBOARDING_ROUTES as readonly string[]).includes(pathname);
 }
 
 /** Role home. null for unknown roles → callers fall through (no redirect loop). */
@@ -105,6 +112,30 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // Onboarding pages: require auth and gate by role, but ALLOW the matching role
+  // even when their shop/worker row is missing — that's the whole point of the
+  // fallback. The page itself redirects away once the row exists.
+  if (isOnboardingRoute(pathname)) {
+    if (!user) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/auth/login";
+      loginUrl.search = "";
+      loginUrl.searchParams.set("redirect", `${pathname}${search}`);
+      return redirectPreservingCookies(loginUrl, supabaseResponse);
+    }
+    const wrongRole =
+      (pathname === "/onboarding/shop" && role === "worker") ||
+      (pathname === "/onboarding/worker" && role === "shop_owner");
+    const home = roleHomePath(role);
+    if (wrongRole && home) {
+      const url = request.nextUrl.clone();
+      url.pathname = home;
+      url.search = "";
+      return redirectPreservingCookies(url, supabaseResponse);
+    }
+    return supabaseResponse;
+  }
+
   if (!isProtected(pathname)) {
     return supabaseResponse;
   }
@@ -147,5 +178,7 @@ export const config = {
     "/worker/:path*",
     "/auth/login",
     "/auth/register",
+    "/onboarding/shop",
+    "/onboarding/worker",
   ],
 };

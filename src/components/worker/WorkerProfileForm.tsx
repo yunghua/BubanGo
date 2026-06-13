@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
-import { Button } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
@@ -28,8 +28,11 @@ export function WorkerProfileForm() {
       <>
         <PageHeader title="個人資料" subtitle="讓店家更了解你" />
         <Card className="mb-6 text-center text-text-muted">
-          找不到打工者資料，請重新登入。
+          還沒有打工者資料，請先完成設定。
         </Card>
+        <LinkButton href="/onboarding/worker" fullWidth className="mb-3">
+          完成打工者設定
+        </LinkButton>
         <LogoutButton />
       </>
     );

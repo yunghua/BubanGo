@@ -68,6 +68,8 @@ Or programmatically: `localStorageRepository.reset()`.
 > - `applyToShift` → `public.apply_to_shift` (`SECURITY DEFINER`; a worker must lock a shift it doesn't own, so RLS privileges are insufficient — identity/role are validated explicitly instead, and the worker is derived from `auth.uid()`).
 >
 > All other methods are plain RLS-scoped table queries. `rejectApplication` is still repository-side.
+>
+> Shop/worker creation outside registration goes through `src/lib/auth/onboarding-service.ts` (the `/onboarding/*` fallback). Migration **0005** adds unique indexes on `shops.owner_id` and `workers.user_id`, so one user can never have two shops/workers (one shop per owner is the MVP product decision — see `SUPABASE_SCHEMA.md`).
 
 ## Switching to Supabase
 
