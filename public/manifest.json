@@ -1,0 +1,10 @@
+{
+  "name": "BubanGo",
+  "short_name": "BubanGo",
+  "description": "臨時缺班補人平台",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#e85d04",
+  "lang": "zh-TW"
+}
