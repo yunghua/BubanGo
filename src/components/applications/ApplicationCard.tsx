@@ -1,7 +1,12 @@
 import type { Application } from "@/types";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { getApplicationStatusLabel } from "@/lib/utils";
+import { Icon } from "@/components/ui/Icon";
+import {
+  formatRelativeTime,
+  getApplicationStatusLabel,
+  getInitial,
+} from "@/lib/utils";
 
 interface ApplicationCardProps {
   application: Application;
@@ -26,24 +31,35 @@ export function ApplicationCard({
   showWorkerInfo = false,
 }: ApplicationCardProps) {
   return (
-    <Card className="mb-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          {shiftTitle && (
-            <p className="font-semibold text-text">{shiftTitle}</p>
+    <Card interactive={!showWorkerInfo} className="mb-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 gap-3">
+          {showWorkerInfo && (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base font-semibold text-primary">
+              {getInitial(application.workerName)}
+            </div>
           )}
-          {showWorkerInfo ? (
-            <>
-              <p className="font-semibold text-text">{application.workerName}</p>
-              <p className="text-sm text-text-muted">{application.workerPhone}</p>
-            </>
-          ) : (
-            <p className="text-sm text-text-muted">
-              申請時間：{new Date(application.appliedAt).toLocaleString("zh-TW")}
-            </p>
-          )}
+          <div className="min-w-0">
+            {shiftTitle && (
+              <p className="truncate font-semibold text-text">{shiftTitle}</p>
+            )}
+            {showWorkerInfo ? (
+              <>
+                <p className="font-semibold text-text">{application.workerName}</p>
+                <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-text-muted">
+                  <Icon name="phone" size={13} className="shrink-0" />
+                  {application.workerPhone || "未提供電話"}
+                </p>
+              </>
+            ) : (
+              <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-text-muted">
+                <Icon name="clock" size={13} className="shrink-0" />
+                申請於 {formatRelativeTime(application.appliedAt)}
+              </p>
+            )}
+          </div>
         </div>
-        <Badge variant={getStatusVariant(application.status)}>
+        <Badge variant={getStatusVariant(application.status)} className="shrink-0">
           {getApplicationStatusLabel(application.status)}
         </Badge>
       </div>

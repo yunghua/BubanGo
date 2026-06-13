@@ -1,5 +1,6 @@
 import { Suspense, use } from "react";
 import { StoreShiftDetail } from "@/components/store/StoreShiftDetail";
+import { PageLoading } from "@/components/ui/Spinner";
 
 interface StoreShiftDetailPageProps {
   params: Promise<{ id: string }>;
@@ -15,7 +16,7 @@ export default function StoreShiftDetailPage({
   const { id } = use(params);
 
   return (
-    <Suspense fallback={<p className="text-sm text-text-muted">載入中...</p>}>
+    <Suspense fallback={<PageLoading />}>
       <StoreShiftDetailContent id={id} />
     </Suspense>
   );

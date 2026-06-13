@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { updateShopProfile } from "@/lib/auth/profile-service";
@@ -27,7 +28,8 @@ export function StoreSettingsForm() {
     return (
       <>
         <PageHeader title="店家資料" subtitle="編輯你的店家資訊" backHref="/store" />
-        <Card className="mb-6 text-center text-text-muted">
+        <Card className="mb-6 flex flex-col items-center gap-3 py-10 text-center text-text-muted">
+          <Icon name="store" size={28} />
           找不到店家資料，請重新登入。
         </Card>
         <LogoutButton />
@@ -68,7 +70,7 @@ export function StoreSettingsForm() {
 
   return (
     <>
-      <PageHeader title="店家資料" subtitle="編輯你的店家資訊" backHref="/store" />
+      <PageHeader title="店家資料" subtitle="這些資訊會顯示給打工者參考" backHref="/store" />
 
       {message && <Alert variant="success">{message}</Alert>}
       {error && <Alert variant="error">{error}</Alert>}
@@ -83,6 +85,7 @@ export function StoreSettingsForm() {
         <Input
           label="電話"
           type="tel"
+          placeholder="0912-345-678"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
@@ -95,16 +98,19 @@ export function StoreSettingsForm() {
         <Textarea
           label="店家簡介"
           rows={3}
+          placeholder="簡單介紹你的店家"
+          hint="讓打工者快速認識你的店"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
         />
 
         <Button type="submit" fullWidth size="lg" className="mt-2" disabled={saving}>
-          {saving ? "儲存中..." : "儲存"}
+          {saving ? "儲存中…" : "儲存"}
         </Button>
       </form>
 
-      <div className="mt-4">
+      <div className="mt-8 border-t border-border pt-6">
+        <h2 className="mb-3 text-sm font-semibold text-text-muted">帳號</h2>
         <LogoutButton />
       </div>
     </>

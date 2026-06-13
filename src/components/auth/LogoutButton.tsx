@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { logout } from "@/lib/auth/auth-service";
 
@@ -24,7 +25,14 @@ export function LogoutButton() {
 
   return (
     <Button variant="outline" fullWidth disabled={busy} onClick={handleLogout}>
-      {busy ? "登出中..." : "登出"}
+      {busy ? (
+        "登出中…"
+      ) : (
+        <>
+          <Icon name="logOut" size={18} />
+          登出
+        </>
+      )}
     </Button>
   );
 }

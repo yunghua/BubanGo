@@ -3,9 +3,11 @@ import { cn } from "@/lib/utils";
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  /** Helper copy shown under the field when there's no error. */
+  hint?: string;
 }
 
-export function Input({ label, error, className, id, ...props }: InputProps) {
+export function Input({ label, error, hint, className, id, ...props }: InputProps) {
   const inputId = id ?? label?.replace(/\s/g, "-").toLowerCase();
 
   return (
@@ -25,7 +27,11 @@ export function Input({ label, error, className, id, ...props }: InputProps) {
         )}
         {...props}
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error ? (
+        <p className="text-sm text-red-500">{error}</p>
+      ) : (
+        hint && <p className="text-xs text-text-muted">{hint}</p>
+      )}
     </div>
   );
 }

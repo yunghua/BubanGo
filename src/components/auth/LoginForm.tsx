@@ -73,12 +73,17 @@ export function LoginForm() {
       />
 
       <Button type="submit" fullWidth size="lg" className="mt-2" disabled={submitting}>
-        {submitting ? "登入中..." : "登入"}
+        {submitting ? "登入中…" : "登入"}
       </Button>
 
       <p className="mt-2 text-center text-sm text-text-muted">
         還沒有帳號？{" "}
-        <LinkButton href="/auth/register" variant="ghost" size="sm" className="inline p-0">
+        <LinkButton
+          href="/auth/register"
+          variant="ghost"
+          size="sm"
+          className="inline p-0 font-semibold text-primary"
+        >
           立即註冊
         </LinkButton>
       </p>

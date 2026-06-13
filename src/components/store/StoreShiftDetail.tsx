@@ -7,11 +7,13 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
 import { ApplicationCard } from "@/components/applications/ApplicationCard";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import {
   formatCurrency,
   formatDate,
+  formatRelativeDay,
   formatTimeRange,
   getShiftStatusLabel,
 } from "@/lib/utils";
@@ -32,16 +34,20 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
 
   if (!shift) {
     return (
-      <div className="py-12 text-center text-text-muted">
-        <p>找不到此缺班</p>
-        <Button className="mt-4" onClick={() => router.push("/store")}>
-          回到店家後台
-        </Button>
-      </div>
+      <>
+        <PageHeader title="缺班管理" backHref="/store" />
+        <Card className="flex flex-col items-center gap-4 py-12 text-center text-text-muted">
+          <Icon name="search" size={32} />
+          <p>找不到此缺班</p>
+          <Button onClick={() => router.push("/store")}>回到店家後台</Button>
+        </Card>
+      </>
     );
   }
 
   const successAction = searchParams.get("success");
+  const relativeDay = formatRelativeDay(shift.date);
+  const pendingCount = applications.filter((a) => a.status === "pending").length;
 
   async function handleAccept(applicationId: string) {
     setActionError("");
@@ -80,50 +86,78 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
       {successAction === "accepted" && (
         <Alert variant="success">已接受申請，缺班狀態已更新為「已媒合」。</Alert>
       )}
-      {successAction === "rejected" && (
-        <Alert variant="info">已婉拒此申請。</Alert>
-      )}
+      {successAction === "rejected" && <Alert variant="info">已婉拒此申請。</Alert>}
       {actionError && <Alert variant="error">{actionError}</Alert>}
 
       <Card className="mb-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-lg font-semibold">{shift.shopName}</p>
-            <p className="mt-1 text-sm text-text-muted">
-              {formatDate(shift.date)} · {formatTimeRange(shift.startTime, shift.endTime)}
-            </p>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <p className="text-lg font-bold text-text">{formatDate(shift.date)}</p>
+            {relativeDay && (
+              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-semibold text-primary">
+                {relativeDay}
+              </span>
+            )}
           </div>
-          <Badge>{getShiftStatusLabel(shift.status)}</Badge>
+          <Badge variant={shift.status === "open" ? "default" : "muted"} dot className="shrink-0">
+            {getShiftStatusLabel(shift.status)}
+          </Badge>
         </div>
 
-        <div className="mt-4 space-y-2 text-sm">
-          <p>
-            <span className="text-text-muted">時薪：</span>
-            <span className="font-semibold text-primary">
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-background p-3">
+            <p className="flex items-center gap-1.5 text-xs text-text-muted">
+              <Icon name="clock" size={14} />
+              時間
+            </p>
+            <p className="mt-1 font-semibold text-text">
+              {formatTimeRange(shift.startTime, shift.endTime)}
+            </p>
+          </div>
+          <div className="rounded-xl bg-primary-light p-3">
+            <p className="flex items-center gap-1.5 text-xs text-text-muted">
+              <Icon name="wage" size={14} />
+              時薪
+            </p>
+            <p className="mt-1 font-bold text-primary">
               {formatCurrency(shift.hourlyRate)}
-            </span>
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3 text-sm">
+          <p className="flex gap-2">
+            <Icon name="mapPin" size={16} className="mt-0.5 shrink-0 text-text-muted" />
+            <span className="text-text">{shift.location}</span>
           </p>
-          <p>
-            <span className="text-text-muted">地點：</span>
-            {shift.location}
+          <p className="flex gap-2">
+            <Icon name="users" size={16} className="mt-0.5 shrink-0 text-text-muted" />
+            <span className="text-text">需求 {shift.requiredWorkers} 人</span>
           </p>
-          <p>
-            <span className="text-text-muted">人數：</span>
-            {shift.requiredWorkers} 人
-          </p>
-          <p>
-            <span className="text-text-muted">內容：</span>
-            {shift.description}
+          <p className="flex gap-2">
+            <Icon name="briefcase" size={16} className="mt-0.5 shrink-0 text-text-muted" />
+            <span className="leading-relaxed text-text">{shift.description}</span>
           </p>
         </div>
       </Card>
 
-      <h2 className="mb-3 text-lg font-semibold">
-        申請者（{applications.length}）
-      </h2>
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-text">申請者</h2>
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-sm font-medium text-text-muted">
+          {applications.length}
+        </span>
+        {pendingCount > 0 && (
+          <span className="ml-auto text-sm font-medium text-primary">
+            {pendingCount} 筆待審核
+          </span>
+        )}
+      </div>
 
       {applications.length === 0 ? (
-        <Card className="py-8 text-center text-text-muted">尚無申請者</Card>
+        <Card className="flex flex-col items-center gap-3 py-10 text-center text-text-muted">
+          <Icon name="users" size={28} />
+          <p>還沒有人申請，發布後稍等一下吧。</p>
+        </Card>
       ) : (
         applications.map((app) => (
           <div key={app.id}>
@@ -131,15 +165,20 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
             {app.status === "pending" && shift.status === "open" && (
               <div className="mb-4 flex gap-2">
                 <Button
-                  size="sm"
                   fullWidth
                   disabled={processingId === app.id}
                   onClick={() => handleAccept(app.id)}
                 >
-                  接受
+                  {processingId === app.id ? (
+                    "處理中…"
+                  ) : (
+                    <>
+                      <Icon name="check" size={18} />
+                      接受申請
+                    </>
+                  )}
                 </Button>
                 <Button
-                  size="sm"
                   variant="outline"
                   fullWidth
                   disabled={processingId === app.id}

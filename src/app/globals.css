@@ -3,7 +3,9 @@
 :root {
   --color-primary: #e85d04;
   --color-primary-dark: #c44d00;
+  --color-primary-light: #fff4ec;
   --color-secondary: #1a535c;
+  --color-secondary-light: #e7f0f1;
   --color-background: #f8f9fa;
   --color-surface: #ffffff;
   --color-text: #1a1a1a;
@@ -16,7 +18,9 @@
 @theme inline {
   --color-primary: var(--color-primary);
   --color-primary-dark: var(--color-primary-dark);
+  --color-primary-light: var(--color-primary-light);
   --color-secondary: var(--color-secondary);
+  --color-secondary-light: var(--color-secondary-light);
   --color-background: var(--color-background);
   --color-surface: var(--color-surface);
   --color-text: var(--color-text);
@@ -31,4 +35,8 @@ body {
   color: var(--color-text);
   font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Mobile polish: kill the grey tap flash and stop iOS auto-resizing text. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }

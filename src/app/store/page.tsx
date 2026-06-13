@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { StoreDashboard } from "@/components/store/StoreDashboard";
+import { PageLoading } from "@/components/ui/Spinner";
 
 export default function StoreDashboardPage() {
   return (
-    <Suspense fallback={<p className="text-sm text-text-muted">載入中...</p>}>
+    <Suspense fallback={<PageLoading />}>
       <StoreDashboard />
     </Suspense>
   );

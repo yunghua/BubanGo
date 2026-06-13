@@ -16,6 +16,7 @@ import type {
   Shift,
 } from "@/types";
 import { getRepository } from "@/lib/data/get-repository";
+import { PageLoading } from "@/components/ui/Spinner";
 
 const EMPTY_SESSION: Session = {
   userId: "",
@@ -117,8 +118,8 @@ export function BubanGoProvider({ children }: { children: React.ReactNode }) {
 
   if (!ready) {
     return (
-      <div className="flex min-h-dvh items-center justify-center text-sm text-text-muted">
-        載入中...
+      <div className="mx-auto flex min-h-dvh max-w-md items-center justify-center">
+        <PageLoading />
       </div>
     );
   }

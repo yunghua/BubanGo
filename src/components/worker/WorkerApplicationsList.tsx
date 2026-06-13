@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import type { Application } from "@/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { ApplicationCard } from "@/components/applications/ApplicationCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Alert } from "@/components/ui/Alert";
+import { LinkButton } from "@/components/ui/Button";
+import { Icon } from "@/components/ui/Icon";
+import { cn } from "@/lib/utils";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 
 export function WorkerApplicationsList() {
@@ -27,6 +31,31 @@ export function WorkerApplicationsList() {
     return data.shifts.find((shift) => shift.id === shiftId)?.shopName;
   }
 
+  function renderGroup(label: string, dotClass: string, items: Application[]) {
+    if (items.length === 0) return null;
+    return (
+      <section className="mb-6">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+          <span className={cn("h-2 w-2 rounded-full", dotClass)} />
+          <span className="text-text">{label}</span>
+          <span className="text-text-muted">{items.length}</span>
+        </h2>
+        {items.map((app) => (
+          <Link
+            key={app.id}
+            href={`/shifts/${app.shiftId}`}
+            className="block"
+          >
+            <ApplicationCard
+              application={app}
+              shiftTitle={getShiftTitle(app.shiftId)}
+            />
+          </Link>
+        ))}
+      </section>
+    );
+  }
+
   return (
     <>
       {showSuccess && (
@@ -35,71 +64,25 @@ export function WorkerApplicationsList() {
 
       <PageHeader
         title="申請紀錄"
-        subtitle={`共 ${applications.length} 筆申請`}
+        subtitle={
+          applications.length > 0
+            ? `共 ${applications.length} 筆申請`
+            : "追蹤你申請過的每個缺班"
+        }
       />
 
       {applications.length === 0 ? (
         <EmptyState
+          icon={<Icon name="briefcase" size={30} />}
           title="還沒有申請紀錄"
-          description="瀏覽附近缺班，找到適合的班次申請吧"
-          action={
-            <Link
-              href="/shifts"
-              className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white"
-            >
-              瀏覽缺班
-            </Link>
-          }
+          description="瀏覽附近缺班，找到適合的班次就送出申請吧。"
+          action={<LinkButton href="/shifts">瀏覽缺班</LinkButton>}
         />
       ) : (
         <>
-          {accepted.length > 0 && (
-            <section className="mb-6">
-              <h2 className="mb-3 text-sm font-semibold text-success">
-                已錄取（{accepted.length}）
-              </h2>
-              {accepted.map((app) => (
-                <Link key={app.id} href={`/shifts/${app.shiftId}`}>
-                  <ApplicationCard
-                    application={app}
-                    shiftTitle={getShiftTitle(app.shiftId)}
-                  />
-                </Link>
-              ))}
-            </section>
-          )}
-
-          {pending.length > 0 && (
-            <section className="mb-6">
-              <h2 className="mb-3 text-sm font-semibold text-warning">
-                審核中（{pending.length}）
-              </h2>
-              {pending.map((app) => (
-                <Link key={app.id} href={`/shifts/${app.shiftId}`}>
-                  <ApplicationCard
-                    application={app}
-                    shiftTitle={getShiftTitle(app.shiftId)}
-                  />
-                </Link>
-              ))}
-            </section>
-          )}
-
-          {rejected.length > 0 && (
-            <section>
-              <h2 className="mb-3 text-sm font-semibold text-text-muted">
-                未錄取（{rejected.length}）
-              </h2>
-              {rejected.map((app) => (
-                <Link key={app.id} href={`/shifts/${app.shiftId}`}>
-                  <ApplicationCard
-                    application={app}
-                    shiftTitle={getShiftTitle(app.shiftId)}
-                  />
-                </Link>
-              ))}
-            </section>
-          )}
+          {renderGroup("已錄取", "bg-success", accepted)}
+          {renderGroup("審核中", "bg-warning", pending)}
+          {renderGroup("未錄取", "bg-gray-300", rejected)}
         </>
       )}
     </>

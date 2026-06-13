@@ -20,20 +20,21 @@ interface LinkButtonProps {
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-white hover:bg-primary-dark active:bg-primary-dark",
-  secondary: "bg-secondary text-white hover:opacity-90",
+  primary:
+    "bg-primary text-white shadow-sm shadow-primary/25 hover:bg-primary-dark active:bg-primary-dark",
+  secondary: "bg-secondary text-white shadow-sm shadow-secondary/20 hover:opacity-90",
   outline: "border-2 border-primary text-primary bg-transparent hover:bg-primary/5",
   ghost: "text-text-muted hover:bg-black/5",
 };
 
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-3 py-2 text-sm",
-  md: "px-4 py-3 text-base",
-  lg: "px-6 py-4 text-lg",
+  sm: "min-h-9 px-3 py-2 text-sm",
+  md: "min-h-12 px-4 py-3 text-base",
+  lg: "min-h-14 px-6 py-4 text-lg",
 };
 
 const baseStyles =
-  "inline-flex items-center justify-center rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100";
 
 export function Button({
   variant = "primary",

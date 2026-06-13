@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { ensureWorkerForCurrentUser } from "@/lib/auth/onboarding-service";
 
@@ -51,13 +53,21 @@ export function WorkerOnboardingForm() {
   }
 
   if (hasWorker) {
-    return <p className="text-sm text-text-muted">已有打工者資料，正在前往缺班列表…</p>;
+    return (
+      <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-3 text-text-muted">
+        <Spinner className="h-6 w-6 text-primary" />
+        <p className="text-sm">已有打工者資料，正在前往缺班列表…</p>
+      </div>
+    );
   }
 
   return (
     <>
-      <PageHeader title="完成個人設定" subtitle="再補幾項資料就完成帳號設定" />
-      <Alert variant="info">我們還需要一些資料來完成你的打工者帳號設定。</Alert>
+      <PageHeader
+        title="完成個人設定"
+        subtitle="再補幾項資料，就能開始申請缺班"
+      />
+      <Alert variant="info">最後一步！填好以下資料即可開始找缺班。</Alert>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {error && <Alert variant="error">{error}</Alert>}
@@ -74,6 +84,7 @@ export function WorkerOnboardingForm() {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="0987-654-321"
+          hint="方便錄取後店家聯絡你"
         />
         <Input
           label="可工作地區"
@@ -89,7 +100,14 @@ export function WorkerOnboardingForm() {
           placeholder="簡述你的相關打工經驗"
         />
         <Button type="submit" fullWidth size="lg" className="mt-2" disabled={submitting}>
-          {submitting ? "儲存中..." : "完成設定"}
+          {submitting ? (
+            "儲存中…"
+          ) : (
+            <>
+              <Icon name="check" size={18} />
+              完成設定
+            </>
+          )}
         </Button>
       </form>
     </>

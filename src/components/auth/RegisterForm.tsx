@@ -167,12 +167,17 @@ export function RegisterForm({ role }: RegisterFormProps) {
       )}
 
       <Button type="submit" fullWidth size="lg" className="mt-2" disabled={submitting}>
-        {submitting ? "處理中..." : "建立帳號"}
+        {submitting ? "處理中…" : "建立帳號"}
       </Button>
 
       <p className="mt-2 text-center text-sm text-text-muted">
         已有帳號？{" "}
-        <LinkButton href="/auth/login" variant="ghost" size="sm" className="inline p-0">
+        <LinkButton
+          href="/auth/login"
+          variant="ghost"
+          size="sm"
+          className="inline p-0 font-semibold text-primary"
+        >
           登入
         </LinkButton>
       </p>

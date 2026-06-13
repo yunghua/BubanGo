@@ -1,5 +1,6 @@
 import { Suspense, use } from "react";
 import { ShiftDetail } from "@/components/shifts/ShiftDetail";
+import { PageLoading } from "@/components/ui/Spinner";
 
 interface ShiftDetailPageProps {
   params: Promise<{ id: string }>;
@@ -13,7 +14,7 @@ export default function ShiftDetailPage({ params }: ShiftDetailPageProps) {
   const { id } = use(params);
 
   return (
-    <Suspense fallback={<p className="text-sm text-text-muted">載入中...</p>}>
+    <Suspense fallback={<PageLoading />}>
       <ShiftDetailContent id={id} />
     </Suspense>
   );

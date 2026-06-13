@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
+import { calculateHours, formatCurrency, formatHours } from "@/lib/utils";
 import {
   validateNewShiftForm,
   type NewShiftFormValues,
@@ -85,11 +87,22 @@ export function NewShiftForm() {
     }
   }
 
+  // Live earnings preview — display only, helps owners price the shift.
+  const rate = Number(values.hourlyRate);
+  const showEstimate =
+    Boolean(values.startTime) &&
+    Boolean(values.endTime) &&
+    values.startTime < values.endTime &&
+    rate > 0;
+  const estimateHours = showEstimate
+    ? calculateHours(values.startTime, values.endTime)
+    : 0;
+
   return (
     <>
       <PageHeader
         title="發布缺班"
-        subtitle="填寫缺班資訊，讓附近打工者看到"
+        subtitle="填寫缺班資訊，讓附近打工者馬上看到"
         backHref="/store"
       />
 
@@ -127,11 +140,29 @@ export function NewShiftForm() {
           type="number"
           placeholder="200"
           min={1}
+          hint="參考同業行情，越有競爭力越快補到人"
           value={values.hourlyRate}
           onChange={(e) => updateField("hourlyRate", e.target.value)}
           error={errors.hourlyRate}
           required
         />
+
+        {showEstimate && (
+          <div className="rounded-xl bg-primary-light p-3 text-sm">
+            <p className="flex items-center gap-1.5 text-xs text-text-muted">
+              <Icon name="wage" size={15} />
+              預估
+            </p>
+            <p className="mt-1 text-text">
+              這個班共 <span className="font-semibold">{formatHours(estimateHours)}</span>
+              ，每位約可拿{" "}
+              <span className="font-bold text-primary">
+                {formatCurrency(rate * estimateHours)}
+              </span>
+            </p>
+          </div>
+        )}
+
         <Input
           label="工作地點"
           placeholder="店家地址或工作地點"
@@ -142,8 +173,9 @@ export function NewShiftForm() {
         />
         <Textarea
           label="工作內容"
-          placeholder="描述工作內容、需要的能力..."
+          placeholder="描述工作內容、需要的能力…"
           rows={4}
+          hint="寫清楚工作項目與注意事項，減少溝通成本"
           value={values.description}
           onChange={(e) => updateField("description", e.target.value)}
           error={errors.description}
@@ -167,7 +199,14 @@ export function NewShiftForm() {
           className="mt-2"
           disabled={isSubmitting}
         >
-          {isSubmitting ? "發布中..." : "發布缺班"}
+          {isSubmitting ? (
+            "發布中…"
+          ) : (
+            <>
+              <Icon name="plus" size={18} />
+              發布缺班
+            </>
+          )}
         </Button>
       </form>
     </>

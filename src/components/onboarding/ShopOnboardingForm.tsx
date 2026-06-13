@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { ensureShopForCurrentUser } from "@/lib/auth/onboarding-service";
 
@@ -55,13 +57,21 @@ export function ShopOnboardingForm() {
   }
 
   if (hasShop) {
-    return <p className="text-sm text-text-muted">已有店家資料，正在前往後台…</p>;
+    return (
+      <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-3 text-text-muted">
+        <Spinner className="h-6 w-6 text-primary" />
+        <p className="text-sm">已有店家資料，正在前往後台…</p>
+      </div>
+    );
   }
 
   return (
     <>
-      <PageHeader title="完成店家設定" subtitle="再補幾項資料就完成帳號設定" />
-      <Alert variant="info">我們還需要一些資料來完成你的店家帳號設定。</Alert>
+      <PageHeader
+        title="完成店家設定"
+        subtitle="再補幾項資料，就能開始發布缺班"
+      />
+      <Alert variant="info">最後一步！填好以下資料即可啟用店家帳號。</Alert>
 
       <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {error && <Alert variant="error">{error}</Alert>}
@@ -77,6 +87,7 @@ export function ShopOnboardingForm() {
           value={address}
           onChange={(e) => setAddress(e.target.value)}
           placeholder="例：台北市大安區復興南路一段 100 號"
+          hint="完整地址讓打工者好找路"
           required
         />
         <Input
@@ -93,7 +104,14 @@ export function ShopOnboardingForm() {
           placeholder="簡單介紹你的店家"
         />
         <Button type="submit" fullWidth size="lg" className="mt-2" disabled={submitting}>
-          {submitting ? "儲存中..." : "完成設定"}
+          {submitting ? (
+            "儲存中…"
+          ) : (
+            <>
+              <Icon name="check" size={18} />
+              完成設定
+            </>
+          )}
         </Button>
       </form>
     </>

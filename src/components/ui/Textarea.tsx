@@ -3,9 +3,11 @@ import { cn } from "@/lib/utils";
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string;
   error?: string;
+  /** Helper copy shown under the field when there's no error. */
+  hint?: string;
 }
 
-export function Textarea({ label, error, className, id, ...props }: TextareaProps) {
+export function Textarea({ label, error, hint, className, id, ...props }: TextareaProps) {
   const inputId = id ?? label?.replace(/\s/g, "-").toLowerCase();
 
   return (
@@ -25,7 +27,11 @@ export function Textarea({ label, error, className, id, ...props }: TextareaProp
         )}
         {...props}
       />
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error ? (
+        <p className="text-sm text-red-500">{error}</p>
+      ) : (
+        hint && <p className="text-xs text-text-muted">{hint}</p>
+      )}
     </div>
   );
 }

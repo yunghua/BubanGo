@@ -20,6 +20,26 @@ The full 補班 (shift-filling) closed loop works end-to-end on Supabase:
 8. Onboarding fallback: if a shop/worker row is missing after login, the user is
    routed to `/onboarding/{shop,worker}` to complete it.
 
+## Frontend / UI
+
+Mobile-first UI built on a small in-repo design system (no external UI library):
+
+- **UI primitives** (`src/components/ui/`): `Button`, `Card`, `Badge`, `Alert`,
+  `Input`, `Textarea`, `PageHeader`, `EmptyState`, plus `Icon` (inline-SVG set,
+  `currentColor`) and `Spinner`/`PageLoading`. Design tokens live in
+  `globals.css` (`--color-primary*`, `--color-secondary*`, etc.).
+- **Scannable shift cards**: `ShiftCard` leads with date (+ 今天/明天 relative
+  chip), time, location, hourly wage, and a status badge — the five fields a
+  worker scans first. Display helpers (`formatRelativeDay`, `formatHours`,
+  `formatRelativeTime`, …) are in `src/lib/utils.ts`.
+- **Layout**: `MobileShell` (max-w-md column) + `BottomNav` (role-aware,
+  icon tabs, honours `env(safe-area-inset-bottom)`).
+- Each screen has dedicated empty / loading / error+success states.
+
+> This layer is presentation-only — it consumes `useBubanGoData()` and the
+> existing services/RPCs unchanged. No auth, RLS, repository, or data-model
+> behaviour is affected by UI work.
+
 ## Backend architecture
 
 ```
