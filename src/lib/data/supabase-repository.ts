@@ -48,6 +48,17 @@ function translateApplyError(message: string): string {
   return `申請失敗：${m}`;
 }
 
+/** Map reject_application RPC error codes (raised as messages) to UI text. */
+function translateRejectError(message: string): string {
+  const m = message ?? "";
+  if (m.includes("not_authenticated")) return "請先登入";
+  if (m.includes("application_not_found")) return "找不到申請紀錄";
+  if (m.includes("not_shift_owner")) return "你沒有權限處理這個申請";
+  if (m.includes("shift_not_editable")) return "此缺班已結束，無法變更";
+  if (m.includes("application_not_rejectable")) return "此申請已處理過";
+  return `操作失敗：${m}`;
+}
+
 /**
  * Supabase-backed implementation of {@link BubanGoRepository}.
  *
@@ -350,75 +361,24 @@ export class SupabaseRepository implements BubanGoRepository {
     }
   }
 
+  /**
+   * Reject an application atomically via the `reject_application` RPC
+   * (migration 0006). Locks the shift row FOR UPDATE; if an accepted worker is
+   * rejected and the shift drops below `required_workers`, the shift flips back
+   * from `matched` to `open` in the same transaction. RLS still applies
+   * (SECURITY INVOKER).
+   */
   async rejectApplication(applicationId: string): Promise<void> {
-    const supabase = this.client;
+    const { error } = await this.client.rpc("reject_application", {
+      p_application_id: applicationId,
+    });
 
-    const { data: app, error: readError } = await supabase
-      .from("applications")
-      .select("id, shift_id, status")
-      .eq("id", applicationId)
-      .maybeSingle();
-
-    if (readError) throw new Error(`讀取申請失敗：${readError.message}`);
-    if (!app) throw new Error("找不到申請紀錄");
-    if (app.status !== "pending") throw new Error("此申請已處理過");
-
-    const { error: updateError } = await supabase
-      .from("applications")
-      .update({ status: "rejected" })
-      .eq("id", applicationId);
-
-    if (updateError) throw new Error(`操作失敗：${updateError.message}`);
-
-    await this.recomputeShiftStatus(app.shift_id);
+    if (error) {
+      throw new Error(translateRejectError(error.message));
+    }
   }
 
   // --- internals ----------------------------------------------------------
-
-  /**
-   * Recompute a shift's status from its accepted application count.
-   * MVP: two non-atomic queries (read count, then write status). Before
-   * production this should move into an `accept_application` RPC that locks the
-   * shift row (`FOR UPDATE`) to avoid races between concurrent accepts.
-   */
-  private async recomputeShiftStatus(shiftId: string): Promise<void> {
-    const supabase = this.client;
-
-    const { data: shift, error: shiftError } = await supabase
-      .from("shifts")
-      .select("id, required_workers, status")
-      .eq("id", shiftId)
-      .maybeSingle();
-
-    if (shiftError) throw new Error(`讀取缺班失敗：${shiftError.message}`);
-    if (!shift || shift.status === "completed" || shift.status === "cancelled") {
-      return;
-    }
-
-    const { count, error: countError } = await supabase
-      .from("applications")
-      .select("id", { count: "exact", head: true })
-      .eq("shift_id", shiftId)
-      .eq("status", "accepted");
-
-    if (countError) throw new Error(`計算錄取人數失敗：${countError.message}`);
-
-    const acceptedCount = count ?? 0;
-
-    if (acceptedCount >= shift.required_workers && shift.status !== "matched") {
-      const { error } = await supabase
-        .from("shifts")
-        .update({ status: "matched" })
-        .eq("id", shiftId);
-      if (error) throw new Error(`更新缺班狀態失敗：${error.message}`);
-    } else if (acceptedCount < shift.required_workers && shift.status === "matched") {
-      const { error } = await supabase
-        .from("shifts")
-        .update({ status: "open" })
-        .eq("id", shiftId);
-      if (error) throw new Error(`更新缺班狀態失敗：${error.message}`);
-    }
-  }
 
   /** Fetch a worker_id → row map for the given ids (deduplicated). */
   private async fetchWorkerMap(ids: string[]): Promise<Map<string, WorkerRow>> {

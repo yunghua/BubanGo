@@ -395,6 +395,56 @@ async function main() {
     console.log("ℹ️  （套用 0005 後可加 --unique 旗標，額外驗證唯一限制擋下第二筆 shop/worker）");
   }
 
+  // ======================================================================
+  // reject_application RPC (migration 0006) — labels R1..R5
+  // ======================================================================
+  const pendingAppId2 = r1.error ? appId1 : appId2; // shift2's still-pending app
+
+  // R1: a non-owner cannot reject. Use worker1's OWN application (appId1) so
+  // RLS lets them SELECT it — they then fail the ownership check with
+  // not_shift_owner (rather than application_not_found for an app they can't
+  // even see). Also gates "RPC not installed yet".
+  const rejNonOwner = await worker.rpc("reject_application", { p_application_id: appId1 });
+  if (isMissingRpc(rejNonOwner.error)) {
+    check("R. reject_application RPC", false, "找不到 RPC → 請先在 Supabase SQL Editor 執行 0006_reject_application_rpc.sql");
+    return finish();
+  }
+  check(
+    "R1. 非店主（申請者本人）無法婉拒 (not_shift_owner)",
+    !!rejNonOwner.error && (rejNonOwner.error.message ?? "").includes("not_shift_owner"),
+    rejNonOwner.error?.message ?? "（不應成功）"
+  );
+
+  // R2: reject a PENDING application → rejected; shift stays matched (pending
+  // never counted toward the quota).
+  const rejPending = await shop.rpc("reject_application", { p_application_id: pendingAppId2 });
+  check(
+    "R2. 婉拒 pending → rejected、shift 維持 matched",
+    !rejPending.error && rejPending.data?.application_status === "rejected" && rejPending.data?.shift_status === "matched",
+    rejPending.error?.message ?? `shift→${rejPending.data?.shift_status}`
+  );
+
+  // R3: an already-rejected application cannot be rejected again.
+  const rejAgain = await shop.rpc("reject_application", { p_application_id: pendingAppId2 });
+  check(
+    "R3. 已婉拒無法再婉拒 (application_not_rejectable)",
+    !!rejAgain.error && (rejAgain.error.message ?? "").includes("application_not_rejectable"),
+    rejAgain.error?.message ?? "（不應成功）"
+  );
+
+  // R4: reject an ACCEPTED application on a matched shift → shift reopens
+  // (applicationId = shift1's accepted worker, required_workers = 1).
+  const rejAccepted = await shop.rpc("reject_application", { p_application_id: applicationId });
+  check(
+    "R4. 婉拒 accepted → shift 由 matched 變回 open",
+    !rejAccepted.error && rejAccepted.data?.application_status === "rejected" && rejAccepted.data?.shift_status === "open",
+    rejAccepted.error?.message ?? `shift→${rejAccepted.data?.shift_status}, accepted=${rejAccepted.data?.accepted_count}`
+  );
+
+  // R5: shift1 is genuinely back in the open list.
+  const reopened = await worker.from("shifts").select("status").eq("id", shiftId).maybeSingle();
+  check("R5. shift1 重新回到 open", reopened.data?.status === "open", `status=${reopened.data?.status}`);
+
   finish();
 }
 

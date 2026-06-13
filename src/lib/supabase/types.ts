@@ -217,6 +217,18 @@ export interface Database {
           created_at: string;
         };
       };
+      /** Atomic reject (migration 0006). Reopens a matched shift if it drops below quota. */
+      reject_application: {
+        Args: { p_application_id: string };
+        Returns: {
+          application_id: string;
+          application_status: string;
+          shift_id: string;
+          shift_status: string;
+          accepted_count: number;
+          required_workers: number;
+        };
+      };
     };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;

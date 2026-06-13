@@ -60,14 +60,14 @@ Or programmatically: `localStorageRepository.reset()`.
 | `getApplicationsByShift(shiftId)` | Applicants for a shift (store review) |
 | `applyToShift(shiftId, workerId)` | Worker applies; creates `pending` application. **Supabase backend: atomic via the `apply_to_shift` RPC (migration 0004)** — derives the worker from `auth.uid()` (the `workerId` arg is ignored in Supabase mode), locks the shift `FOR UPDATE`, enforces role/open/full/duplicate. |
 | `acceptApplication(id)` | Store accepts; may set shift → `matched`. **Supabase backend: atomic via the `accept_application` RPC (migration 0003)** — locks the shift `FOR UPDATE` so concurrent accepts can't exceed `required_workers`. |
-| `rejectApplication(id)` | Store rejects; application → `rejected` |
+| `rejectApplication(id)` | Store rejects; application → `rejected`. **Supabase backend: atomic via the `reject_application` RPC (migration 0006)** — locks the shift `FOR UPDATE`; rejecting an accepted worker reopens a `matched` shift if it drops below `required_workers`. |
 | `getCurrentSession()` | Current shop/worker IDs (stand-in for auth) |
 
 > **Note (Supabase):** two mutations run as database functions rather than client table writes, to be atomic and race-free:
 > - `acceptApplication` → `public.accept_application` (`SECURITY INVOKER`; the owner already has the RLS privileges, so it only adds atomicity).
 > - `applyToShift` → `public.apply_to_shift` (`SECURITY DEFINER`; a worker must lock a shift it doesn't own, so RLS privileges are insufficient — identity/role are validated explicitly instead, and the worker is derived from `auth.uid()`).
 >
-> All other methods are plain RLS-scoped table queries. `rejectApplication` is still repository-side.
+> The three write mutations — `applyToShift` (`apply_to_shift`), `acceptApplication` (`accept_application`), `rejectApplication` (`reject_application`) — are all atomic RPCs. All other methods are plain RLS-scoped table queries.
 >
 > Shop/worker creation outside registration goes through `src/lib/auth/onboarding-service.ts` (the `/onboarding/*` fallback). Migration **0005** adds unique indexes on `shops.owner_id` and `workers.user_id`, so one user can never have two shops/workers (one shop per owner is the MVP product decision — see `SUPABASE_SCHEMA.md`).
 
