@@ -135,36 +135,36 @@ export class LocalStorageRepository implements BubanGoRepository {
     return this.initStorage();
   }
 
-  getData(): BubanGoData {
+  async getData(): Promise<BubanGoData> {
     return this.loadData();
   }
 
-  getShifts(): Shift[] {
-    return this.getData().shifts;
+  async getShifts(): Promise<Shift[]> {
+    return this.loadData().shifts;
   }
 
-  getShiftById(id: string): Shift | undefined {
-    return this.getShifts().find((shift) => shift.id === id);
+  async getShiftById(id: string): Promise<Shift | undefined> {
+    return this.loadData().shifts.find((shift) => shift.id === id);
   }
 
-  getApplications(): Application[] {
-    return this.getData().applications;
+  async getApplications(): Promise<Application[]> {
+    return this.loadData().applications;
   }
 
-  getApplicationsByWorker(workerId: string): Application[] {
-    return this.getApplications().filter((app) => app.workerId === workerId);
+  async getApplicationsByWorker(workerId: string): Promise<Application[]> {
+    return this.loadData().applications.filter((app) => app.workerId === workerId);
   }
 
-  getApplicationsByShift(shiftId: string): Application[] {
-    return this.getApplications().filter((app) => app.shiftId === shiftId);
+  async getApplicationsByShift(shiftId: string): Promise<Application[]> {
+    return this.loadData().applications.filter((app) => app.shiftId === shiftId);
   }
 
-  getCurrentSession(): Session {
-    return this.getData().session;
+  async getCurrentSession(): Promise<Session> {
+    return this.loadData().session;
   }
 
-  createShift(input: CreateShiftInput): Shift {
-    const data = this.getData();
+  async createShift(input: CreateShiftInput): Promise<Shift> {
+    const data = this.loadData();
     const shop = data.shops.find((s) => s.id === input.shopId);
 
     if (!shop) {
@@ -194,8 +194,8 @@ export class LocalStorageRepository implements BubanGoRepository {
     return newShift;
   }
 
-  applyToShift(shiftId: string, workerId: string): Application {
-    const data = this.getData();
+  async applyToShift(shiftId: string, workerId: string): Promise<Application> {
+    const data = this.loadData();
     const shift = data.shifts.find((s) => s.id === shiftId);
     const worker = data.workers.find((w) => w.id === workerId);
 
@@ -240,8 +240,8 @@ export class LocalStorageRepository implements BubanGoRepository {
     return application;
   }
 
-  acceptApplication(applicationId: string): void {
-    const data = this.getData();
+  async acceptApplication(applicationId: string): Promise<void> {
+    const data = this.loadData();
     const application = data.applications.find((app) => app.id === applicationId);
 
     if (!application) {
@@ -262,8 +262,8 @@ export class LocalStorageRepository implements BubanGoRepository {
     this.saveData({ ...data, applications: updatedApplications });
   }
 
-  rejectApplication(applicationId: string): void {
-    const data = this.getData();
+  async rejectApplication(applicationId: string): Promise<void> {
+    const data = this.loadData();
     const application = data.applications.find((app) => app.id === applicationId);
 
     if (!application) {

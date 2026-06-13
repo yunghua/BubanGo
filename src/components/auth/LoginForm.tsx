@@ -1,0 +1,76 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Input } from "@/components/ui/Input";
+import { Button, LinkButton } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
+import { useBubanGoData } from "@/hooks/useBubanGoData";
+import { login } from "@/lib/auth/auth-service";
+
+export function LoginForm() {
+  const router = useRouter();
+  const { refresh } = useBubanGoData();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    try {
+      const { role } = await login(email.trim(), password);
+      await refresh();
+
+      if (role === "shop") {
+        router.push("/store");
+      } else if (role === "worker") {
+        router.push("/shifts");
+      } else {
+        setError("找不到帳號角色資料，請重新註冊或聯絡客服。");
+        setSubmitting(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "登入失敗，請稍後再試");
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+      {error && <Alert variant="error">{error}</Alert>}
+
+      <Input
+        label="Email"
+        type="email"
+        placeholder="your@email.com"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        required
+      />
+      <Input
+        label="密碼"
+        type="password"
+        placeholder="••••••••"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        required
+      />
+
+      <Button type="submit" fullWidth size="lg" className="mt-2" disabled={submitting}>
+        {submitting ? "登入中..." : "登入"}
+      </Button>
+
+      <p className="mt-2 text-center text-sm text-text-muted">
+        還沒有帳號？{" "}
+        <LinkButton href="/auth/register" variant="ghost" size="sm" className="inline p-0">
+          立即註冊
+        </LinkButton>
+      </p>
+    </form>
+  );
+}

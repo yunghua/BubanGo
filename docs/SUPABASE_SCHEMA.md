@@ -1,6 +1,10 @@
 # BubanGo Supabase Schema
 
-This document describes the PostgreSQL schema in [`supabase/schema.sql`](../supabase/schema.sql). It is the target data model for `SupabaseRepository` — the frontend still uses `localStorageRepository` until explicitly switched in `get-repository.ts`.
+This document describes the PostgreSQL schema in [`supabase/schema.sql`](../supabase/schema.sql). It is the live data model for `SupabaseRepository`, which is now the **default** backend (`NEXT_PUBLIC_DATA_BACKEND=supabase`). `localStorageRepository` remains a dev fallback (`=local`).
+
+> **Apply order in the Supabase SQL Editor:** `supabase/schema.sql` → `supabase/migrations/0001_applicant_count_trigger.sql` → (if email confirmation stays on) `supabase/migrations/0002_handle_new_user.sql`.
+>
+> **Implementation note — `location` ↔ `title`:** the app stores the shift location string in the `shifts.title` column (no separate `location` column in the MVP). `hourly_wage`, `required_workers`, `applicant_count` map to `hourlyRate`, `requiredWorkers`, `applicantCount`. Conversions live in `src/lib/data/mappers.ts`.
 
 ## Tables overview
 

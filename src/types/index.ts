@@ -54,7 +54,13 @@ export interface Application {
 }
 
 export interface Session {
+  /** auth.uid() of the signed-in user; "" when signed out. */
+  userId: string;
+  /** App role of the signed-in user; null when signed out or onboarding incomplete. */
+  role: UserRole | null;
+  /** shops.id for a shop_owner; "" otherwise. */
   currentShopId: string;
+  /** workers.id for a worker; "" otherwise. */
   currentWorkerId: string;
 }
 

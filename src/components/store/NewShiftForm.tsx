@@ -47,7 +47,7 @@ export function NewShiftForm() {
     });
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitError("");
 
@@ -65,7 +65,7 @@ export function NewShiftForm() {
     setIsSubmitting(true);
 
     try {
-      const shift = createShift({
+      const shift = await createShift({
         shopId: currentShop.id,
         date: values.date,
         startTime: values.startTime,

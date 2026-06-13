@@ -52,12 +52,12 @@ export function ShiftDetail({ shiftId }: ShiftDetailProps) {
   const estimatedPay = shift.hourlyRate * durationHours;
   const showSuccess = searchParams.get("success") === "applied";
 
-  function handleApply() {
+  async function handleApply() {
     setError("");
     setIsSubmitting(true);
 
     try {
-      applyForShift(shiftId);
+      await applyForShift(shiftId);
       router.replace(`/shifts/${shiftId}?success=applied`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "申請失敗，請稍後再試");

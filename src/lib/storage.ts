@@ -11,10 +11,10 @@ export const initStorage = () => localStorageRepository.getData();
 export const loadData = () => localStorageRepository.getData();
 export const getSession = () => localStorageRepository.getCurrentSession();
 export const getShiftById = (id: string) => localStorageRepository.getShiftById(id);
-export const getShiftsByShopId = (shopId: string) =>
-  localStorageRepository.getShifts().filter((shift) => shift.shopId === shopId);
-export const getOpenShifts = () =>
-  localStorageRepository.getShifts().filter((shift) => shift.status === "open");
+export const getShiftsByShopId = async (shopId: string) =>
+  (await localStorageRepository.getShifts()).filter((shift) => shift.shopId === shopId);
+export const getOpenShifts = async () =>
+  (await localStorageRepository.getShifts()).filter((shift) => shift.status === "open");
 export const getApplicationsByShiftId = (shiftId: string) =>
   localStorageRepository.getApplicationsByShift(shiftId);
 export const getApplicationsByWorkerId = (workerId: string) =>

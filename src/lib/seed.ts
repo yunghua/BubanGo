@@ -97,6 +97,8 @@ const seedApplications: Application[] = [
 ];
 
 const defaultSession: Session = {
+  userId: "local-dev-user",
+  role: null,
   currentShopId: "shop-1",
   currentWorkerId: "worker-1",
 };

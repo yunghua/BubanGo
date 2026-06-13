@@ -1,5 +1,9 @@
 # BubanGo Data Layer
 
+> **Status:** Supabase is now the **default** backend (`NEXT_PUBLIC_DATA_BACKEND=supabase`).
+> The repository interface is **async**. `localStorageRepository` remains as a
+> dev fallback (`NEXT_PUBLIC_DATA_BACKEND=local`). See "Switching backends" below.
+
 ## Overview
 
 BubanGo separates **UI** from **data access** via the `BubanGoRepository` interface. Page components and feature components only talk to `useBubanGoData()`; the hook delegates to whichever repository is active.
@@ -7,12 +11,12 @@ BubanGo separates **UI** from **data access** via the `BubanGoRepository` interf
 ```
 Page / Feature Component
         ↓
-  useBubanGoData() hook
+  useBubanGoData() hook   ← async load + { ready, error } state
         ↓
-  getRepository()  ← single switch point
+  getRepository()  ← single switch point (NEXT_PUBLIC_DATA_BACKEND)
         ↓
-  LocalStorageRepository  (current)
-  SupabaseRepository      (future)
+  SupabaseRepository      (default)  — Supabase Auth + Postgres + RLS
+  LocalStorageRepository  (fallback) — NEXT_PUBLIC_DATA_BACKEND=local
 ```
 
 ## Current implementation: LocalStorage

@@ -6,82 +6,421 @@ import type {
   Shift,
 } from "@/types";
 import type { BubanGoRepository } from "@/lib/data/bubango-repository";
+import type { Database } from "@/lib/supabase/types";
+import { getBrowserSupabaseClient } from "@/lib/supabase/browser";
+import {
+  mapApplicationRow,
+  mapShiftRow,
+  mapShopRow,
+  mapWorkerRow,
+} from "@/lib/data/mappers";
+
+type WorkerRow = Database["public"]["Tables"]["workers"]["Row"];
+
+const EMPTY_SESSION: Session = {
+  userId: "",
+  role: null,
+  currentShopId: "",
+  currentWorkerId: "",
+};
 
 /**
- * Future Supabase-backed repository.
+ * Supabase-backed implementation of {@link BubanGoRepository}.
  *
- * Table mapping (planned):
- * - getData / getCurrentSession → profiles + session from Supabase Auth
- * - getShifts / getShiftById / createShift → shifts
- * - getApplications / getApplicationsByWorker / getApplicationsByShift → applications
- * - applyToShift → INSERT into applications
- * - acceptApplication / rejectApplication → UPDATE applications.status
- * - shops → shops (joined on shifts.shop_id)
- * - workers → workers (joined on applications.worker_id)
+ * Runs in the browser via the cookie-based client from `@supabase/ssr`.
+ * Every table access goes through Row Level Security — the client only ever
+ * uses the anon key, so the database policies are the real authorization layer.
+ *
+ * Naming conversions (snake_case ↔ camelCase) live in `mappers.ts`. Joins are
+ * done in JS (fetch + Map) rather than embedded selects to keep the hand-written
+ * Database types simple and the query results strongly typed.
  */
 export class SupabaseRepository implements BubanGoRepository {
-  getData(): BubanGoData {
-    // TODO: fetch shops, workers, shifts, applications from Supabase
-    throw new Error("Supabase repository not implemented yet");
+  private get client() {
+    return getBrowserSupabaseClient();
   }
 
-  getShifts(): Shift[] {
-    // TODO: SELECT * FROM shifts WHERE status = 'open' (or all for store dashboard)
-    throw new Error("Supabase repository not implemented yet");
+  // --- session ------------------------------------------------------------
+
+  async getCurrentSession(): Promise<Session> {
+    const supabase = this.client;
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return EMPTY_SESSION;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      throw new Error(`讀取個人資料失敗：${profileError.message}`);
+    }
+
+    // Authenticated but onboarding not finished (no profile row yet).
+    if (!profile) {
+      return { userId: user.id, role: null, currentShopId: "", currentWorkerId: "" };
+    }
+
+    if (profile.role === "shop_owner") {
+      const { data: shop, error } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        throw new Error(`讀取店家資料失敗：${error.message}`);
+      }
+
+      return {
+        userId: user.id,
+        role: "shop",
+        currentShopId: shop?.id ?? "",
+        currentWorkerId: "",
+      };
+    }
+
+    const { data: worker, error } = await supabase
+      .from("workers")
+      .select("id")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`讀取打工者資料失敗：${error.message}`);
+    }
+
+    return {
+      userId: user.id,
+      role: "worker",
+      currentShopId: "",
+      currentWorkerId: worker?.id ?? "",
+    };
   }
 
-  getShiftById(id: string): Shift | undefined {
-    // TODO: SELECT * FROM shifts WHERE id = $id
-    void id;
-    throw new Error("Supabase repository not implemented yet");
+  // --- full snapshot ------------------------------------------------------
+
+  async getData(): Promise<BubanGoData> {
+    const supabase = this.client;
+    const session = await this.getCurrentSession();
+
+    if (!session.userId) {
+      return { shops: [], workers: [], shifts: [], applications: [], session };
+    }
+
+    const [shopsRes, shiftsRes, appsRes, profileRes] = await Promise.all([
+      supabase.from("shops").select("*"),
+      supabase.from("shifts").select("*").order("date", { ascending: true }),
+      supabase
+        .from("applications")
+        .select("*")
+        .order("created_at", { ascending: false }),
+      supabase.from("profiles").select("phone").eq("id", session.userId).maybeSingle(),
+    ]);
+
+    if (shopsRes.error) throw new Error(`讀取店家失敗：${shopsRes.error.message}`);
+    if (shiftsRes.error) throw new Error(`讀取缺班失敗：${shiftsRes.error.message}`);
+    if (appsRes.error) throw new Error(`讀取申請失敗：${appsRes.error.message}`);
+
+    const ownPhone = profileRes.data?.phone ?? null;
+    const shopNameById = new Map(shopsRes.data.map((s) => [s.id, s.name]));
+
+    const shops = shopsRes.data.map((s) =>
+      mapShopRow(s, s.owner_id === session.userId ? ownPhone : null)
+    );
+    const shifts = shiftsRes.data.map((s) =>
+      mapShiftRow(s, shopNameById.get(s.shop_id) ?? "")
+    );
+
+    // Workers referenced by visible applications (+ the current worker) so the
+    // application cards and the worker profile page have names to render.
+    const workerById = await this.fetchWorkerMap([
+      ...appsRes.data.map((a) => a.worker_id),
+      ...(session.currentWorkerId ? [session.currentWorkerId] : []),
+    ]);
+
+    const workers = Array.from(workerById.values()).map(mapWorkerRow);
+    const applications = appsRes.data.map((a) =>
+      mapApplicationRow(a, workerById.get(a.worker_id) ?? null)
+    );
+
+    return { shops, workers, shifts, applications, session };
   }
 
-  createShift(input: CreateShiftInput): Shift {
-    // TODO: INSERT INTO shifts (shop_id, date, start_time, end_time, ...)
-    void input;
-    throw new Error("Supabase repository not implemented yet");
+  // --- shifts -------------------------------------------------------------
+
+  async getShifts(): Promise<Shift[]> {
+    const supabase = this.client;
+    const [shiftsRes, shopsRes] = await Promise.all([
+      supabase.from("shifts").select("*").order("date", { ascending: true }),
+      supabase.from("shops").select("id, name"),
+    ]);
+
+    if (shiftsRes.error) throw new Error(`讀取缺班失敗：${shiftsRes.error.message}`);
+    if (shopsRes.error) throw new Error(`讀取店家失敗：${shopsRes.error.message}`);
+
+    const shopNameById = new Map(shopsRes.data.map((s) => [s.id, s.name]));
+    return shiftsRes.data.map((s) => mapShiftRow(s, shopNameById.get(s.shop_id) ?? ""));
   }
 
-  getApplications(): Application[] {
-    // TODO: SELECT * FROM applications
-    throw new Error("Supabase repository not implemented yet");
+  async getShiftById(id: string): Promise<Shift | undefined> {
+    const supabase = this.client;
+    const { data: shift, error } = await supabase
+      .from("shifts")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) throw new Error(`讀取缺班失敗：${error.message}`);
+    if (!shift) return undefined;
+
+    const { data: shop, error: shopError } = await supabase
+      .from("shops")
+      .select("name")
+      .eq("id", shift.shop_id)
+      .maybeSingle();
+
+    if (shopError) throw new Error(`讀取店家失敗：${shopError.message}`);
+
+    return mapShiftRow(shift, shop?.name ?? "");
   }
 
-  getApplicationsByWorker(workerId: string): Application[] {
-    // TODO: SELECT * FROM applications WHERE worker_id = $workerId
-    void workerId;
-    throw new Error("Supabase repository not implemented yet");
+  async createShift(input: CreateShiftInput): Promise<Shift> {
+    const supabase = this.client;
+
+    const { data: row, error } = await supabase
+      .from("shifts")
+      .insert({
+        shop_id: input.shopId,
+        // MVP: the `title` column carries the location string.
+        title: input.location,
+        date: input.date,
+        start_time: input.startTime,
+        end_time: input.endTime,
+        hourly_wage: input.hourlyRate,
+        required_workers: input.requiredWorkers,
+        description: input.description,
+        status: "open",
+        applicant_count: 0,
+      })
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(`發布缺班失敗：${error.message}`);
+    }
+
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("name")
+      .eq("id", row.shop_id)
+      .maybeSingle();
+
+    return mapShiftRow(row, shop?.name ?? "");
   }
 
-  getApplicationsByShift(shiftId: string): Application[] {
-    // TODO: SELECT * FROM applications WHERE shift_id = $shiftId
-    void shiftId;
-    throw new Error("Supabase repository not implemented yet");
+  // --- applications -------------------------------------------------------
+
+  async getApplications(): Promise<Application[]> {
+    const supabase = this.client;
+    const { data, error } = await supabase
+      .from("applications")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(`讀取申請失敗：${error.message}`);
+    return this.attachWorkers(data);
   }
 
-  applyToShift(shiftId: string, workerId: string): Application {
-    // TODO: INSERT INTO applications (shift_id, worker_id, status = 'pending')
-    void shiftId;
-    void workerId;
-    throw new Error("Supabase repository not implemented yet");
+  async getApplicationsByWorker(workerId: string): Promise<Application[]> {
+    const supabase = this.client;
+    const { data, error } = await supabase
+      .from("applications")
+      .select("*")
+      .eq("worker_id", workerId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(`讀取申請失敗：${error.message}`);
+    return this.attachWorkers(data);
   }
 
-  acceptApplication(applicationId: string): void {
-    // TODO: UPDATE applications SET status = 'accepted' WHERE id = $applicationId
-    // TODO: recompute shift status → matched when accepted count >= required_workers
-    void applicationId;
-    throw new Error("Supabase repository not implemented yet");
+  async getApplicationsByShift(shiftId: string): Promise<Application[]> {
+    const supabase = this.client;
+    const { data, error } = await supabase
+      .from("applications")
+      .select("*")
+      .eq("shift_id", shiftId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(`讀取申請失敗：${error.message}`);
+    return this.attachWorkers(data);
   }
 
-  rejectApplication(applicationId: string): void {
-    // TODO: UPDATE applications SET status = 'rejected' WHERE id = $applicationId
-    void applicationId;
-    throw new Error("Supabase repository not implemented yet");
+  async applyToShift(shiftId: string, workerId: string): Promise<Application> {
+    const supabase = this.client;
+
+    // Guard: shift must exist and still be open.
+    const { data: shift, error: shiftError } = await supabase
+      .from("shifts")
+      .select("id, status")
+      .eq("id", shiftId)
+      .maybeSingle();
+
+    if (shiftError) throw new Error(`讀取缺班失敗：${shiftError.message}`);
+    if (!shift) throw new Error("找不到此缺班");
+    if (shift.status !== "open") throw new Error("此缺班目前無法申請");
+
+    const { data: row, error } = await supabase
+      .from("applications")
+      .insert({ shift_id: shiftId, worker_id: workerId, status: "pending" })
+      .select("*")
+      .single();
+
+    if (error) {
+      // 23505 = unique_violation on (shift_id, worker_id).
+      if (error.code === "23505") {
+        throw new Error("你已申請過此缺班");
+      }
+      throw new Error(`申請失敗：${error.message}`);
+    }
+
+    // applicant_count is maintained by a DB trigger (sync_applicant_count) so it
+    // stays correct even though workers cannot UPDATE shifts under RLS.
+
+    const { data: worker } = await supabase
+      .from("workers")
+      .select("name, phone")
+      .eq("id", workerId)
+      .maybeSingle();
+
+    return mapApplicationRow(row, worker ?? null);
   }
 
-  getCurrentSession(): Session {
-    // TODO: resolve current user from profiles + Supabase Auth → shop_id or worker_id
-    throw new Error("Supabase repository not implemented yet");
+  async acceptApplication(applicationId: string): Promise<void> {
+    const supabase = this.client;
+
+    const { data: app, error: readError } = await supabase
+      .from("applications")
+      .select("id, shift_id, status")
+      .eq("id", applicationId)
+      .maybeSingle();
+
+    if (readError) throw new Error(`讀取申請失敗：${readError.message}`);
+    if (!app) throw new Error("找不到申請紀錄");
+    if (app.status !== "pending") throw new Error("此申請已處理過");
+
+    const { error: updateError } = await supabase
+      .from("applications")
+      .update({ status: "accepted" })
+      .eq("id", applicationId);
+
+    if (updateError) throw new Error(`操作失敗：${updateError.message}`);
+
+    await this.recomputeShiftStatus(app.shift_id);
+  }
+
+  async rejectApplication(applicationId: string): Promise<void> {
+    const supabase = this.client;
+
+    const { data: app, error: readError } = await supabase
+      .from("applications")
+      .select("id, shift_id, status")
+      .eq("id", applicationId)
+      .maybeSingle();
+
+    if (readError) throw new Error(`讀取申請失敗：${readError.message}`);
+    if (!app) throw new Error("找不到申請紀錄");
+    if (app.status !== "pending") throw new Error("此申請已處理過");
+
+    const { error: updateError } = await supabase
+      .from("applications")
+      .update({ status: "rejected" })
+      .eq("id", applicationId);
+
+    if (updateError) throw new Error(`操作失敗：${updateError.message}`);
+
+    await this.recomputeShiftStatus(app.shift_id);
+  }
+
+  // --- internals ----------------------------------------------------------
+
+  /**
+   * Recompute a shift's status from its accepted application count.
+   * MVP: two non-atomic queries (read count, then write status). Before
+   * production this should move into an `accept_application` RPC that locks the
+   * shift row (`FOR UPDATE`) to avoid races between concurrent accepts.
+   */
+  private async recomputeShiftStatus(shiftId: string): Promise<void> {
+    const supabase = this.client;
+
+    const { data: shift, error: shiftError } = await supabase
+      .from("shifts")
+      .select("id, required_workers, status")
+      .eq("id", shiftId)
+      .maybeSingle();
+
+    if (shiftError) throw new Error(`讀取缺班失敗：${shiftError.message}`);
+    if (!shift || shift.status === "completed" || shift.status === "cancelled") {
+      return;
+    }
+
+    const { count, error: countError } = await supabase
+      .from("applications")
+      .select("id", { count: "exact", head: true })
+      .eq("shift_id", shiftId)
+      .eq("status", "accepted");
+
+    if (countError) throw new Error(`計算錄取人數失敗：${countError.message}`);
+
+    const acceptedCount = count ?? 0;
+
+    if (acceptedCount >= shift.required_workers && shift.status !== "matched") {
+      const { error } = await supabase
+        .from("shifts")
+        .update({ status: "matched" })
+        .eq("id", shiftId);
+      if (error) throw new Error(`更新缺班狀態失敗：${error.message}`);
+    } else if (acceptedCount < shift.required_workers && shift.status === "matched") {
+      const { error } = await supabase
+        .from("shifts")
+        .update({ status: "open" })
+        .eq("id", shiftId);
+      if (error) throw new Error(`更新缺班狀態失敗：${error.message}`);
+    }
+  }
+
+  /** Fetch a worker_id → row map for the given ids (deduplicated). */
+  private async fetchWorkerMap(ids: string[]): Promise<Map<string, WorkerRow>> {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    if (uniqueIds.length === 0) return new Map();
+
+    const { data, error } = await this.client
+      .from("workers")
+      .select("*")
+      .in("id", uniqueIds);
+
+    if (error) throw new Error(`讀取打工者失敗：${error.message}`);
+    return new Map((data ?? []).map((w) => [w.id, w]));
+  }
+
+  /** Join worker name/phone onto a list of application rows. */
+  private async attachWorkers(
+    rows: Database["public"]["Tables"]["applications"]["Row"][]
+  ): Promise<Application[]> {
+    const workerById = await this.fetchWorkerMap(rows.map((r) => r.worker_id));
+    return rows.map((r) => mapApplicationRow(r, workerById.get(r.worker_id) ?? null));
   }
 }
 

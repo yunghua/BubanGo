@@ -43,11 +43,11 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
 
   const successAction = searchParams.get("success");
 
-  function handleAccept(applicationId: string) {
+  async function handleAccept(applicationId: string) {
     setActionError("");
     setProcessingId(applicationId);
     try {
-      acceptApplication(applicationId);
+      await acceptApplication(applicationId);
       router.replace(`/store/shifts/${shiftId}?success=accepted`);
     } catch (error) {
       setActionError(
@@ -58,11 +58,11 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
     }
   }
 
-  function handleReject(applicationId: string) {
+  async function handleReject(applicationId: string) {
     setActionError("");
     setProcessingId(applicationId);
     try {
-      rejectApplication(applicationId);
+      await rejectApplication(applicationId);
       router.replace(`/store/shifts/${shiftId}?success=rejected`);
     } catch (error) {
       setActionError(
