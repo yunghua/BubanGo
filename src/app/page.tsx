@@ -1,7 +1,6 @@
 import { MobileShell } from "@/components/layout/MobileShell";
-import { LinkButton } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
-import { LineLoginButton } from "@/components/auth/LineLoginButton";
+import { HomeActions } from "@/components/home/HomeActions";
 
 const features: { icon: IconName; title: string; desc: string }[] = [
   { icon: "bolt", title: "快速補人", desc: "幾分鐘發布缺班，馬上開始招募" },
@@ -41,15 +40,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 pt-8">
-          <LineLoginButton />
-          <LinkButton href="/auth/login" variant="outline" size="lg" fullWidth>
-            使用 Email 登入
-          </LinkButton>
-          <p className="text-center text-xs leading-relaxed text-text-muted">
-            店家、打工者皆可使用；登入後再選擇身分
-          </p>
-        </div>
+        <HomeActions />
       </div>
     </MobileShell>
   );

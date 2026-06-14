@@ -117,7 +117,10 @@ export function StoreSettingsForm() {
 
       <div className="mt-8 border-t border-border pt-6">
         <h2 className="mb-3 text-sm font-semibold text-text-muted">帳號</h2>
-        <LogoutButton />
+        <LogoutButton
+          label="登出 / 切換帳號"
+          hint="想切換 LINE 帳號？請先登出再重新登入。"
+        />
       </div>
     </>
   );
