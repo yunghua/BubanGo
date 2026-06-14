@@ -191,6 +191,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      line_accounts: {
+        Row: {
+          id: string;
+          user_id: string;
+          line_user_id: string;
+          display_name: string | null;
+          picture_url: string | null;
+          linked_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          line_user_id: string;
+          display_name?: string | null;
+          picture_url?: string | null;
+          linked_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          line_user_id?: string;
+          display_name?: string | null;
+          picture_url?: string | null;
+          linked_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<never, never>;
     Functions: {

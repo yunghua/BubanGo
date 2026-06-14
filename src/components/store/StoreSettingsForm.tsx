@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { LineBindingCard } from "@/components/line/LineBindingCard";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { updateShopProfile } from "@/lib/auth/profile-service";
 
@@ -108,6 +109,11 @@ export function StoreSettingsForm() {
           {saving ? "儲存中…" : "儲存"}
         </Button>
       </form>
+
+      <div className="mt-8">
+        <h2 className="mb-3 text-sm font-semibold text-text-muted">LINE 連動</h2>
+        <LineBindingCard />
+      </div>
 
       <div className="mt-8 border-t border-border pt-6">
         <h2 className="mb-3 text-sm font-semibold text-text-muted">帳號</h2>

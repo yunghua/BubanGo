@@ -66,6 +66,7 @@ Next.js 15 (App Router, React 19, Tailwind) — client components
 | `workers` | Worker profile (`name`, `phone`, `area`, `experience`) |
 | `shifts` | Shift posting (`date`, times, `hourly_wage`, `required_workers`, `applicant_count`, `status`; `title` holds the location string in MVP) |
 | `applications` | Worker → shift application (`status`: pending/accepted/rejected/cancelled) |
+| `line_accounts` | Optional 1:1 LINE binding (`line_user_id`, display/picture); own-row RLS. Written only by the server after verifying a LINE ID token (migration 0007) |
 
 ## Active DB objects (migrations)
 
@@ -76,6 +77,7 @@ Next.js 15 (App Router, React 19, Tailwind) — client components
 | `accept_application(p_application_id)` | 0003 | RPC (SECURITY INVOKER) | Lock shift `FOR UPDATE`, verify owner, accept, auto-`matched` |
 | `apply_to_shift(p_shift_id)` | 0004 | RPC (SECURITY DEFINER) | Worker from `auth.uid()`, lock shift, enforce role/open/full/duplicate, insert pending |
 | `reject_application(p_application_id)` | 0006 | RPC (SECURITY INVOKER) | Verify owner, lock shift, reject pending/accepted, reopen `matched`→`open` if below quota |
+| `line_accounts` + own-row RLS | 0007 | table + policies | Optional LINE binding; server-only writes after ID-token verification. See [`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md) |
 | `shops_owner_id_unique`, `workers_user_id_unique` | 0005 | unique index | One shop per owner / one worker per user |
 | `*_set_updated_at` | schema.sql | trigger | `updated_at` maintenance on all tables |
 
