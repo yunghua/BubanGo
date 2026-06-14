@@ -2,6 +2,7 @@ import Link from "next/link";
 import { MobileShell } from "@/components/layout/MobileShell";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { RegisterForm } from "@/components/auth/RegisterForm";
+import { LineLoginButton } from "@/components/auth/LineLoginButton";
 import { cn } from "@/lib/utils";
 
 interface RegisterPageProps {
@@ -19,6 +20,15 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
         subtitle={isShop ? "開始發布缺班，快速補人" : "找到附近的臨時打工機會"}
         backHref="/"
       />
+
+      <LineLoginButton label="使用 LINE 註冊 / 登入" />
+      <p className="mt-2 text-center text-xs text-text-muted">最快開始，免記密碼</p>
+
+      <div className="my-6 flex items-center gap-3">
+        <span className="h-px flex-1 bg-border" />
+        <span className="text-xs text-text-muted">或使用 Email 註冊</span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
 
       <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1">
         <Link

@@ -78,6 +78,7 @@ Next.js 15 (App Router, React 19, Tailwind) — client components
 | `apply_to_shift(p_shift_id)` | 0004 | RPC (SECURITY DEFINER) | Worker from `auth.uid()`, lock shift, enforce role/open/full/duplicate, insert pending |
 | `reject_application(p_application_id)` | 0006 | RPC (SECURITY INVOKER) | Verify owner, lock shift, reject pending/accepted, reopen `matched`→`open` if below quota |
 | `line_accounts` + own-row RLS | 0007 | table + policies | Optional LINE binding; server-only writes after ID-token verification. See [`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md) |
+| `handle_new_user` (role-optional) | 0008 | trigger (replace) | Skips auto-provisioning when sign-up has no role (LINE users onboard instead). No RLS/RPC change. See [`LINE_LOGIN_SETUP.md`](./LINE_LOGIN_SETUP.md) |
 | `shops_owner_id_unique`, `workers_user_id_unique` | 0005 | unique index | One shop per owner / one worker per user |
 | `*_set_updated_at` | schema.sql | trigger | `updated_at` maintenance on all tables |
 
@@ -88,13 +89,25 @@ Next.js 15 (App Router, React 19, Tailwind) — client components
 
 ## Auth behavior
 
-- Email + password via Supabase Auth. `role` is stored in `user_metadata` (at
-  sign-up) and in `profiles.role`.
+- **LINE Login is the primary login** via a Supabase **Custom OAuth provider**
+  (`custom:line`, scopes `openid profile`, email not requested). `signInWithLine()`
+  → LINE → Supabase → `/auth/callback` (exchanges the code, routes by role). The
+  Channel secret lives only in the Supabase Dashboard. See
+  [`LINE_LOGIN_SETUP.md`](./LINE_LOGIN_SETUP.md).
+- **Email + password remains a fallback** (`/auth/login` → 「使用 Email 登入」,
+  `/auth/register`). `role` is stored in `user_metadata` (at sign-up) and in
+  `profiles.role`.
+- **First-time LINE users have no role** → `/auth/callback` sends them to
+  `/onboarding` (role chooser: 身分 + display name + Taiwan phone + 店家 address).
+  Onboarding creates the profile + shop/worker row and mirrors the role into
+  `user_metadata`. Migration **0008** stops the `handle_new_user` trigger from
+  auto-assigning a role when none is present.
 - Login routes by role: `shop_owner` → `/store`, `worker` → `/shifts`; honors a
-  `?redirect=` param; routes to `/onboarding/*` if the role's row is missing.
-- Middleware protects `/store/**`, `/worker/**`, `/onboarding/{shop,worker}`
-  (role-gated), and bounces signed-in users away from `/auth/login|register`.
-  Role comes from `user_metadata` (no DB round-trip). Bypassed in local mode.
+  `?redirect=`/`?next=` param; routes to `/onboarding*` when role/row is missing.
+- Middleware protects `/store/**`, `/worker/**`, `/onboarding*` (role-gated), and
+  bounces signed-in users away from `/auth/login|register`. Role comes from
+  `user_metadata` (no DB round-trip); an authenticated user **without** a role is
+  sent to `/onboarding` (not assumed to be any role). Bypassed in local mode.
 
 ## Email Confirmation behavior
 

@@ -68,6 +68,36 @@ delete from public.workers where user_id  = '<uid>';   -- worker case
 3. Verify exactly one row: `select count(*) from public.shops where owner_id='<uid>';` → `1`.
 4. Re-open `/onboarding/shop` while a shop exists → it redirects you away to `/store`.
 
+## LINE Login (primary)
+
+LINE Login uses a Supabase **Custom OAuth provider** (`custom:line`) + the
+`/auth/callback` route + role onboarding. It changes auth routing, the callback,
+middleware, and adds migration `0008` — so **update docs and re-run the email e2e
+before relying on it**; the LINE leg itself can't be automated without a
+configured provider and a real LINE account.
+
+What to verify (no LINE account needed):
+
+1. `npm run build` passes and lists `ƒ /auth/callback` and `○ /onboarding`.
+2. **Login page renders** (`/auth/login`): 「使用 LINE 登入」 (green) on top,
+   「使用 Email 登入」 reveals the email form. Before the provider is configured,
+   clicking LINE shows 「LINE 登入尚未啟用…」 (handled error, no crash).
+3. **Email/password fallback still works** end-to-end (register → login → role
+   home), unchanged. The existing `e2e-flow.mjs` covers **only** this email path
+   — it does **not** exercise LINE Login; don't expect it to.
+4. **First-time LINE user → onboarding** (simulate without LINE): in the SQL
+   Editor `delete from public.profiles where id='<uid>'` for a test user, then
+   visit `/store` or `/worker/*` → middleware redirects to `/onboarding`; pick
+   身分 + name + Taiwan phone (+ 店家 address) → profile + shop/worker row created
+   → lands on `/store` or `/shifts`. Re-running `/onboarding` afterwards bounces
+   home (no loop).
+5. **Migration 0008:** after applying, a new **email** sign-up (role in metadata)
+   still provisions a profile + row; a sign-up **without** a role no longer
+   auto-creates a `打工者` worker (it's left for onboarding).
+
+Requires the manual Supabase + LINE setup ([`LINE_LOGIN_SETUP.md`](./LINE_LOGIN_SETUP.md))
+to test the real LINE round-trip. No destructive e2e is run for this feature.
+
 ## LINE account binding
 
 Binding adds the `line_accounts` table (migration `0007`) + two API routes

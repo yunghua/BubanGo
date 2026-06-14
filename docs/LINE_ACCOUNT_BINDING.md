@@ -5,6 +5,15 @@ LINE account, so we can (in a later task) send shift/match notifications over
 LINE. This does **not** replace Supabase email/password auth — it's an optional
 add-on. Setup of the LINE channel/LIFF app is in [`LIFF_SETUP.md`](./LIFF_SETUP.md).
 
+> **Still needed after LINE Login?** Yes — for the future **push** feature.
+> LINE *Login* (see [`LINE_LOGIN_SETUP.md`](./LINE_LOGIN_SETUP.md)) identifies a
+> user for **sign-in** via a Custom OAuth provider; it does not, by itself, give
+> us a push target with messaging consent. `line_accounts` is the RLS-protected
+> place to store the verified LINE userId for the **Messaging API** push later,
+> and it also lets **email/password** users opt into LINE notifications. A future
+> enhancement could pre-fill it from a LINE-login user's OAuth identity, but the
+> binding card keeps working unchanged today.
+
 ---
 
 ## Flow

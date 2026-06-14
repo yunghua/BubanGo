@@ -19,6 +19,91 @@ async function requireUserId(): Promise<string> {
   return user.id;
 }
 
+export type OnboardingRole = "shop_owner" | "worker";
+
+export interface CompleteOnboardingInput {
+  role: OnboardingRole;
+  displayName: string;
+  phone: string;
+  /** Required when role === "shop_owner" (shops.address is NOT NULL). */
+  address?: string;
+}
+
+/**
+ * First-time onboarding for users who arrive without a role (primarily LINE
+ * Login users — the 0008 trigger no longer auto-provisions them). Creates the
+ * profile (with the chosen role) BEFORE the shop/worker row, because the
+ * shops/workers insert policies check `profiles.role`. Finally mirrors the role
+ * into auth metadata so the DB-free middleware recognizes the user next request.
+ *
+ * Identity comes from `auth.uid()`; every write goes through RLS (own-row).
+ */
+export async function completeOnboarding(
+  input: CompleteOnboardingInput
+): Promise<void> {
+  const supabase = getBrowserSupabaseClient();
+  const userId = await requireUserId();
+
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    {
+      id: userId,
+      role: input.role,
+      display_name: input.displayName,
+      phone: input.phone || null,
+    },
+    { onConflict: "id" }
+  );
+  if (profileError) throw new Error(`建立個人資料失敗：${profileError.message}`);
+
+  if (input.role === "shop_owner") {
+    await ensureShopForCurrentUser({
+      name: input.displayName,
+      address: input.address ?? "",
+      area: "",
+      description: "",
+    });
+  } else {
+    await ensureWorkerForCurrentUser({
+      name: input.displayName,
+      phone: input.phone,
+      area: "",
+      experience: "",
+    });
+  }
+
+  // Mirror role into auth metadata for middleware. Fatal on failure so we never
+  // leave a profile whose role the middleware can't see (avoids redirect churn).
+  const { error: metaError } = await supabase.auth.updateUser({
+    data: { role: input.role },
+  });
+  if (metaError) throw new Error(`完成設定失敗：${metaError.message}`);
+}
+
+/**
+ * Best-effort prefill for the onboarding form from auth metadata (a LINE user's
+ * display name often arrives via the OIDC `name` claim). Never throws.
+ */
+export async function getSuggestedProfile(): Promise<{
+  displayName: string;
+  phone: string;
+}> {
+  try {
+    const supabase = getBrowserSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
+    const pick = (k: string) =>
+      typeof meta[k] === "string" ? (meta[k] as string) : "";
+    return {
+      displayName: pick("display_name") || pick("name") || pick("full_name"),
+      phone: pick("phone"),
+    };
+  } catch {
+    return { displayName: "", phone: "" };
+  }
+}
+
 export interface ShopOnboardingInput {
   name: string;
   address: string;

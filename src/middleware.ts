@@ -10,10 +10,13 @@ import { getSupabaseEnv } from "@/lib/supabase/env";
  * - Role mismatch is bounced to the correct home (worker→/shifts, owner→/store).
  * - Signed-in users hitting /auth/login or /auth/register are bounced to their
  *   role home (a logged-in user has no reason to see those pages).
- * - /onboarding/{shop,worker} require auth and are role-gated, but the matching
- *   role is allowed in even with a missing shop/worker row (the fallback flow).
- * - Role comes from `user.user_metadata.role` (set at sign-up), so no extra DB
- *   round-trip and no RLS dependency.
+ * - /onboarding (base) is the role chooser for first-time LINE users (no role
+ *   yet); /onboarding/{shop,worker} require auth and are role-gated, but the
+ *   matching role is allowed in even with a missing shop/worker row (fallback).
+ * - Role comes from `user.user_metadata.role`, so no extra DB round-trip and no
+ *   RLS dependency. LINE users have NO role until onboarding sets it (and mirrors
+ *   it into metadata), so an authenticated user without a role is sent to
+ *   /onboarding rather than assumed to be any particular role.
  * - Dev bypass: with NEXT_PUBLIC_DATA_BACKEND=local there is no Supabase session,
  *   so middleware does nothing and the localStorage flow works unblocked.
  *
@@ -102,7 +105,28 @@ export async function middleware(request: NextRequest) {
   // (user = null) and unknown-role (home = null) users fall through and see the
   // page — this is what prevents a redirect loop with the protection below.
   if (isAuthRoute(pathname)) {
-    const home = user ? roleHomePath(role) : null;
+    // Any signed-in user leaves the auth pages: to their role home, or to the
+    // onboarding chooser if they haven't picked a role yet (first-time LINE).
+    if (user) {
+      const url = request.nextUrl.clone();
+      url.pathname = roleHomePath(role) ?? "/onboarding";
+      url.search = "";
+      return redirectPreservingCookies(url, supabaseResponse);
+    }
+    return supabaseResponse;
+  }
+
+  // Base onboarding = the role chooser for first-time users without a role yet
+  // (primarily LINE Login users). Require auth; bounce already-roled users home.
+  if (pathname === "/onboarding") {
+    if (!user) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/auth/login";
+      loginUrl.search = "";
+      loginUrl.searchParams.set("redirect", `${pathname}${search}`);
+      return redirectPreservingCookies(loginUrl, supabaseResponse);
+    }
+    const home = roleHomePath(role);
     if (home) {
       const url = request.nextUrl.clone();
       url.pathname = home;
@@ -149,14 +173,23 @@ export async function middleware(request: NextRequest) {
     return redirectPreservingCookies(loginUrl, supabaseResponse);
   }
 
-  // Role-based protection. Unknown role (home = null) falls through and the
-  // page's own empty state handles it.
+  // Authenticated but no role yet (first-time LINE user) → finish onboarding
+  // before entering a role area. Email/password users always carry a role, so
+  // this only affects users who signed in before choosing 身分.
   const home = roleHomePath(role);
+  if (!home) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/onboarding";
+    url.search = "";
+    return redirectPreservingCookies(url, supabaseResponse);
+  }
+
+  // Role-based protection: wrong role → correct home.
   const wrongRole =
     (isUnder(pathname, "/store") && role === "worker") ||
     (isUnder(pathname, "/worker") && role === "shop_owner");
 
-  if (wrongRole && home) {
+  if (wrongRole) {
     const url = request.nextUrl.clone();
     url.pathname = home;
     url.search = "";
@@ -178,6 +211,7 @@ export const config = {
     "/worker/:path*",
     "/auth/login",
     "/auth/register",
+    "/onboarding",
     "/onboarding/shop",
     "/onboarding/worker",
   ],

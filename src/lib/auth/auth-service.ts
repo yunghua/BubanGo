@@ -43,6 +43,13 @@ function translateAuthError(message: string): string {
   }
   if (m.includes("password")) return "密碼不符合規則（至少 6 個字元）";
   if (m.includes("rate limit")) return "操作太頻繁，請稍後再試";
+  if (
+    m.includes("provider") ||
+    m.includes("not enabled") ||
+    m.includes("unsupported")
+  ) {
+    return "LINE 登入尚未啟用，請稍後再試或改用 Email 登入";
+  }
   if (m.includes("email")) return "Email 格式不正確或無法使用";
   return message;
 }
@@ -164,6 +171,38 @@ export async function logout(): Promise<void> {
   const supabase = getBrowserSupabaseClient();
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error(`登出失敗：${error.message}`);
+}
+
+/**
+ * Start LINE Login via the Supabase **Custom OAuth provider** `custom:line`
+ * (configured in the Supabase Dashboard — the Channel secret lives there, never
+ * in this repo). Requests `openid profile` only; email is NOT requested.
+ *
+ * The browser is redirected to LINE and back to `/auth/callback`, which
+ * exchanges the code for a session and routes by profile/role. Pass `next` to
+ * return an already-onboarded user to a specific same-site path.
+ *
+ * Works from a normal browser and from the LINE in-app browser / LIFF.
+ */
+export async function signInWithLine(next?: string): Promise<void> {
+  const supabase = getBrowserSupabaseClient();
+
+  const callback = new URL("/auth/callback", window.location.origin);
+  if (next && next.startsWith("/") && !next.startsWith("//")) {
+    callback.searchParams.set("next", next);
+  }
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "custom:line",
+    options: {
+      redirectTo: callback.toString(),
+      scopes: "openid profile",
+    },
+  });
+
+  // With the default (browser) flow Supabase performs the redirect itself; we
+  // only reach here on a setup error (e.g. provider not configured yet).
+  if (error) throw new Error(translateAuthError(error.message));
 }
 
 // --- idempotent onboarding helpers ---------------------------------------

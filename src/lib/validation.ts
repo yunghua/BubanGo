@@ -12,6 +12,18 @@ export interface NewShiftFormValues {
   requiredWorkers: string;
 }
 
+/**
+ * Loose Taiwan phone check for the required contact field — accepts a mobile
+ * (09xxxxxxxx) or a landline (0[2-8]…), ignoring dashes/spaces. Not used as a
+ * login credential, only as profile contact info.
+ */
+export function isTaiwanPhone(phone: string): boolean {
+  const digits = phone.replace(/\D/g, "");
+  if (/^09\d{8}$/.test(digits)) return true; // mobile
+  if (/^0[2-8]\d{7,8}$/.test(digits)) return true; // landline
+  return false;
+}
+
 export function validateNewShiftForm(values: NewShiftFormValues): FieldErrors {
   const errors: FieldErrors = {};
 

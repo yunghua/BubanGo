@@ -136,7 +136,8 @@ export function LineBindingCard() {
             )}
           </div>
           <p className="mt-0.5 text-sm leading-relaxed text-text-muted">
-            綁定後，未來可在 LINE 收到媒合與班表通知。綁定為選用，不影響現在使用。
+            綁定後，未來可在 LINE 收到媒合與班表通知（與登入方式無關）。
+            綁定為選用，不影響現在使用。
           </p>
 
           <div className="mt-3">

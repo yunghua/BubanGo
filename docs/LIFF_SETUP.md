@@ -4,6 +4,11 @@ This guide covers the **manual** LINE Developers configuration needed to run
 BubanGo as a LIFF app (LINE Front-end Framework) and to verify LINE ID tokens
 server-side for [account binding](./LINE_ACCOUNT_BINDING.md).
 
+> **LIFF ≠ LINE Login.** *Login* (how users sign in) is a separate Supabase
+> Custom OAuth flow — see [`LINE_LOGIN_SETUP.md`](./LINE_LOGIN_SETUP.md). This
+> LIFF setup only enables (a) opening BubanGo inside the LINE app and (b) the
+> notification **binding** card. The two can share one LINE Login channel.
+
 > **The app works without any of this.** When `NEXT_PUBLIC_LIFF_ID` is unset,
 > BubanGo runs as a normal web app and the LINE binding card just shows an
 > "open in LINE" state. Do this setup only when you want LINE binding to work.

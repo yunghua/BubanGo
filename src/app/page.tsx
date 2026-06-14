@@ -1,11 +1,12 @@
 import { MobileShell } from "@/components/layout/MobileShell";
 import { LinkButton } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
+import { LineLoginButton } from "@/components/auth/LineLoginButton";
 
 const features: { icon: IconName; title: string; desc: string }[] = [
   { icon: "bolt", title: "快速補人", desc: "幾分鐘發布缺班，馬上開始招募" },
   { icon: "mapPin", title: "在地媒合", desc: "找附近的打工者，省去通勤時間" },
-  { icon: "shield", title: "安心可靠", desc: "Email 驗證帳號，雙方資料更可信" },
+  { icon: "shield", title: "安心可靠", desc: "用 LINE 登入，免記密碼又安心" },
 ];
 
 export default function HomePage() {
@@ -41,22 +42,13 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-col gap-3 pt-8">
-          <LinkButton href="/auth/register?role=shop" size="lg" fullWidth>
-            <Icon name="store" size={20} />
-            我是店家，要發布缺班
+          <LineLoginButton />
+          <LinkButton href="/auth/login" variant="outline" size="lg" fullWidth>
+            使用 Email 登入
           </LinkButton>
-          <LinkButton
-            href="/auth/register?role=worker"
-            variant="outline"
-            size="lg"
-            fullWidth
-          >
-            <Icon name="search" size={20} />
-            我是打工者，要找缺班
-          </LinkButton>
-          <LinkButton href="/auth/login" variant="ghost" fullWidth>
-            已有帳號？登入
-          </LinkButton>
+          <p className="text-center text-xs leading-relaxed text-text-muted">
+            店家、打工者皆可使用；登入後再選擇身分
+          </p>
         </div>
       </div>
     </MobileShell>
