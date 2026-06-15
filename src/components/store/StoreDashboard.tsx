@@ -6,7 +6,7 @@ import type { Shift } from "@/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { LinkButton } from "@/components/ui/Button";
+import { Button, LinkButton } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { ShiftCard } from "@/components/shifts/ShiftCard";
@@ -81,9 +81,14 @@ export function StoreDashboard() {
         title={currentShop.name}
         subtitle="店家後台"
         action={
-          <LinkButton href="/store/settings" variant="ghost" size="sm">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => window.location.assign("/store/settings")}
+          >
             編輯
-          </LinkButton>
+          </Button>
         }
       />
 
