@@ -24,6 +24,10 @@ export default function RootLayout({
     <html lang="zh-TW">
       <body className="antialiased">
         <AppProviders>{children}</AppProviders>
+        {/* Build/version marker — bottom padding clears the fixed BottomNav + safe area */}
+        <footer className="mx-auto max-w-md px-4 pt-8 pb-[calc(5.5rem_+_env(safe-area-inset-bottom))] text-center text-xs text-text-muted">
+          BubanGo v0.1.3-line-login-primary-webview-debug-1
+        </footer>
       </body>
     </html>
   );
