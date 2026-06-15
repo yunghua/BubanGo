@@ -114,7 +114,7 @@ export function StoreSettingsForm() {
         {/* Diagnostic: LineBindingCard temporarily disabled to test LIFF redirect on /store/settings */}
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <p className="text-sm text-text-muted">
-            LINE 連動功能暫時關閉測試中。
+            LINE 通知功能即將推出，目前可先使用 LINE 登入。
           </p>
         </div>
       </div>
