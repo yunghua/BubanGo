@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { LogoutButton } from "@/components/auth/LogoutButton";
-import { LineBindingCard } from "@/components/line/LineBindingCard";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { updateShopProfile } from "@/lib/auth/profile-service";
 
@@ -112,7 +111,12 @@ export function StoreSettingsForm() {
 
       <div className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-text-muted">LINE 連動</h2>
-        <LineBindingCard />
+        {/* Diagnostic: LineBindingCard temporarily disabled to test LIFF redirect on /store/settings */}
+        <div className="rounded-2xl bg-white p-4 shadow-sm">
+          <p className="text-sm text-text-muted">
+            LINE 連動功能暫時關閉測試中。
+          </p>
+        </div>
       </div>
 
       <div className="mt-8 border-t border-border pt-6">
