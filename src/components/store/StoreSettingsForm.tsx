@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { LineBindingCard } from "@/components/line/LineBindingCard";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import { updateShopProfile } from "@/lib/auth/profile-service";
 
@@ -111,12 +112,7 @@ export function StoreSettingsForm() {
 
       <div className="mt-8">
         <h2 className="mb-3 text-sm font-semibold text-text-muted">LINE 連動</h2>
-        {/* Diagnostic: LineBindingCard temporarily disabled to test LIFF redirect on /store/settings */}
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-sm text-text-muted">
-            LINE 通知功能即將推出，目前可先使用 LINE 登入。
-          </p>
-        </div>
+        <LineBindingCard />
       </div>
 
       <div className="mt-8 border-t border-border pt-6">

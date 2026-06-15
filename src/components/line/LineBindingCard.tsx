@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
-import { initLiff, getLineIdToken, isLiffConfigured } from "@/lib/line/liff";
+import { initLiff, getLineIdToken } from "@/lib/line/liff";
 import {
   getMyLineAccount,
   linkLineAccount,
@@ -19,8 +19,7 @@ import {
 type View =
   | { kind: "loading" }
   | { kind: "local" } // local dev backend — no real session to bind
-  | { kind: "not_in_line" } // plain browser / LIFF unset / not opened in LINE
-  | { kind: "ready_to_link" } // opened in LINE, not yet linked
+  | { kind: "unlinked" } // not yet linked; tapping bind initializes LIFF on demand
   | { kind: "linked"; account: LineAccount };
 
 const ERROR_MESSAGES: Record<LineLinkErrorCode, string> = {
@@ -44,6 +43,10 @@ export function LineBindingCard() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  // Do not initialize LIFF on mount.
+  // In the LINE in-app browser, liff.init() can redirect the WebView back to the
+  // configured LIFF Endpoint URL. Initialize LIFF only after the user taps bind.
+  // On mount we only read the existing binding (own row, via RLS) — no LIFF call.
   useEffect(() => {
     let active = true;
 
@@ -53,32 +56,15 @@ export function LineBindingCard() {
         return;
       }
 
-      // Already linked? Show that first (own row only, via RLS).
       try {
         const account = await getMyLineAccount();
-        if (account && active) {
-          setView({ kind: "linked", account });
-          return;
-        }
+        if (!active) return;
+        setView(account ? { kind: "linked", account } : { kind: "unlinked" });
       } catch {
-        // Couldn't read the binding (e.g. no session). Fall through; the link
-        // action itself returns a precise error if the user tries.
+        // Couldn't read the binding (e.g. no session). Show the unlinked state;
+        // the bind action itself returns a precise error if the user tries.
+        if (active) setView({ kind: "unlinked" });
       }
-
-      if (!active) return;
-
-      if (!isLiffConfigured()) {
-        setView({ kind: "not_in_line" });
-        return;
-      }
-
-      const state = await initLiff();
-      if (!active) return;
-      setView(
-        state.kind === "ready" && state.isInClient
-          ? { kind: "ready_to_link" }
-          : { kind: "not_in_line" }
-      );
     })();
 
     return () => {
@@ -86,10 +72,17 @@ export function LineBindingCard() {
     };
   }, []);
 
+  // LIFF initializes here — only in response to an explicit user tap, never on mount.
   async function handleLink() {
     setError("");
     setBusy(true);
     try {
+      const state = await initLiff();
+      if (state.kind !== "ready" || !state.isInClient) {
+        // Not opened inside the LINE app (or LIFF unconfigured): can't bind here.
+        // Surface a friendly message instead of redirecting automatically.
+        throw new LineLinkError("missing_id_token");
+      }
       const idToken = await getLineIdToken();
       if (!idToken) throw new LineLinkError("missing_id_token");
       const account = await linkLineAccount(idToken);
@@ -106,12 +99,8 @@ export function LineBindingCard() {
     setBusy(true);
     try {
       await unlinkLineAccount();
-      const state = isLiffConfigured() ? await initLiff() : null;
-      setView(
-        state?.kind === "ready" && state.isInClient
-          ? { kind: "ready_to_link" }
-          : { kind: "not_in_line" }
-      );
+      // Return to the unlinked state directly — do not initialize LIFF after unlink.
+      setView({ kind: "unlinked" });
     } catch (err) {
       setError(messageFor(err));
     } finally {
@@ -154,19 +143,7 @@ export function LineBindingCard() {
               </p>
             )}
 
-            {view.kind === "not_in_line" && (
-              <div>
-                <p className="mb-2 text-sm text-text-muted">
-                  請在 LINE App 內開啟 BubanGo，才能完成綁定。
-                </p>
-                <Button variant="outline" fullWidth disabled>
-                  <Icon name="chat" size={18} />
-                  綁定 LINE 接收通知
-                </Button>
-              </div>
-            )}
-
-            {view.kind === "ready_to_link" && (
+            {view.kind === "unlinked" && (
               <Button fullWidth disabled={busy} onClick={handleLink}>
                 {busy ? (
                   "綁定中…"
