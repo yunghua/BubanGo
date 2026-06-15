@@ -10,6 +10,7 @@ import { Button, LinkButton } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
 import { ShiftCard } from "@/components/shifts/ShiftCard";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import {
   formatDate,
@@ -198,6 +199,14 @@ export function StoreDashboard() {
           ))}
         </div>
       )}
+
+      <div className="mt-8 border-t border-border pt-6">
+        <h2 className="mb-3 text-sm font-semibold text-text-muted">帳號</h2>
+        <LogoutButton
+          label="登出 / 切換帳號"
+          hint="想切換 LINE 帳號？請先登出再重新登入。"
+        />
+      </div>
     </>
   );
 }
