@@ -22,6 +22,8 @@ export type LineLinkErrorCode =
   | "invalid_line_token"
   | "line_account_already_linked"
   | "line_config_missing"
+  | "liff_not_ready"
+  | "not_in_line"
   | "link_failed"
   | "unlink_failed"
   | "network_error";
