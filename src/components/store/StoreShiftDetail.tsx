@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Icon } from "@/components/ui/Icon";
+import { PageLoading } from "@/components/ui/Spinner";
 import { ApplicationCard } from "@/components/applications/ApplicationCard";
 import { useBubanGoData } from "@/hooks/useBubanGoData";
 import {
@@ -31,6 +32,16 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
 
   const shift = data.shifts.find((s) => s.id === shiftId);
   const applications = data.applications.filter((app) => app.shiftId === shiftId);
+  const isOwner = !!shift && shift.shopId === data.session.currentShopId;
+  const shouldRedirect = !!shift && !isOwner;
+
+  // A non-owner (another shop, a worker, or any other signed-in user) must not
+  // see the management shell — send them to the public shift detail page.
+  useEffect(() => {
+    if (shouldRedirect) {
+      router.replace(`/shifts/${shiftId}`);
+    }
+  }, [shouldRedirect, router, shiftId]);
 
   if (!shift) {
     return (
@@ -43,6 +54,11 @@ export function StoreShiftDetail({ shiftId }: StoreShiftDetailProps) {
         </Card>
       </>
     );
+  }
+
+  if (!isOwner) {
+    // Redirect is in flight (effect above); render loading, never the shell.
+    return <PageLoading />;
   }
 
   const successAction = searchParams.get("success");

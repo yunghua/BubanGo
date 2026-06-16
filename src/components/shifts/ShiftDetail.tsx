@@ -107,6 +107,16 @@ export function ShiftDetail({ shiftId }: ShiftDetailProps) {
       );
     }
 
+    // Only workers can apply. A signed-in shop account never sees an apply
+    // action (the apply_to_shift RPC also rejects non-workers server-side).
+    if (data.session.role === "shop") {
+      return (
+        <Button fullWidth size="lg" disabled>
+          只有打工者可以申請缺班
+        </Button>
+      );
+    }
+
     if (existingApplication) {
       const label =
         existingApplication.status === "accepted"
