@@ -51,14 +51,13 @@ export async function POST() {
   const idData = (lineIdentity?.identity_data ?? {}) as Record<string, unknown>;
   const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
 
-  // LINE userId = OIDC `sub`. Prefer identity_data / identity.id (managed by
-  // Supabase Auth) over user_metadata (user-mutable) for this trusted value.
+  // LINE userId = OIDC `sub`, taken ONLY from the LINE auth identity
+  // (identity_data / identity.id), which Supabase Auth manages and the user
+  // cannot mutate. We deliberately do NOT fall back to the user's editable
+  // profile metadata, since Supabase fills its `sub` with the account's own
+  // Supabase UUID for email signups — that would bind a bogus line_user_id.
   const lineUserId =
-    str(idData.sub) ??
-    str(idData.provider_id) ??
-    str(lineIdentity?.id) ??
-    str(meta.sub) ??
-    str(meta.provider_id);
+    str(idData.sub) ?? str(idData.provider_id) ?? str(lineIdentity?.id);
 
   if (!lineUserId) {
     // Temporary diagnostic: log only the available KEY names, never the values.
