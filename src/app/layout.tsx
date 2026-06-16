@@ -26,7 +26,7 @@ export default function RootLayout({
         <AppProviders>{children}</AppProviders>
         {/* Build/version marker — bottom padding clears the fixed BottomNav + safe area */}
         <footer className="mx-auto max-w-md px-4 pt-8 pb-[calc(5.5rem_+_env(safe-area-inset-bottom))] text-center text-xs text-text-muted">
-          BubanGo v0.1.4-line-notification-binding
+          BubanGo v0.1.5-role-gating-and-application-rules
         </footer>
       </body>
     </html>
