@@ -31,9 +31,12 @@ export type LineLinkErrorCode =
 
 export class LineLinkError extends Error {
   code: LineLinkErrorCode;
-  constructor(code: LineLinkErrorCode) {
+  /** Optional non-secret diagnostic detail (e.g. the raw LIFF init error). */
+  detail?: string;
+  constructor(code: LineLinkErrorCode, detail?: string) {
     super(code);
     this.code = code;
+    this.detail = detail;
     this.name = "LineLinkError";
   }
 }

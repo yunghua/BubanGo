@@ -28,6 +28,23 @@ export function isLiffConfigured(): boolean {
 }
 
 /**
+ * Best-effort, non-secret description of a LIFF init rejection, for diagnostics.
+ * The @line/liff SDK can reject with a LiffError ({ code, message }) or a plain
+ * Error; capture whichever string fields are present.
+ */
+function describeInitError(err: unknown): string {
+  if (err && typeof err === "object") {
+    const e = err as { code?: unknown; message?: unknown };
+    const parts = [e.code, e.message].filter(
+      (v): v is string => typeof v === "string" && v.length > 0
+    );
+    if (parts.length > 0) return parts.join(": ");
+  }
+  if (typeof err === "string" && err) return err;
+  return "LIFF 初始化失敗";
+}
+
+/**
  * Initialize LIFF exactly once. Safe to call anywhere on the client; resolves to
  * `unconfigured` when no LIFF id is set and to `error` (never a throw) on
  * failure so the rest of the UI keeps working.
@@ -56,10 +73,7 @@ export function initLiff(): Promise<LiffState> {
         };
       } catch (err) {
         initPromise = null; // allow a later retry
-        return {
-          kind: "error",
-          message: err instanceof Error ? err.message : "LIFF 初始化失敗",
-        };
+        return { kind: "error", message: describeInitError(err) };
       }
     })();
   }

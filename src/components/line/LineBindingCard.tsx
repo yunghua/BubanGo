@@ -41,10 +41,17 @@ function messageFor(err: unknown): string {
   return ERROR_MESSAGES[code] ?? ERROR_MESSAGES.link_failed;
 }
 
+/** Collapse whitespace and cap length before showing a raw error in the UI. */
+function sanitizeDebug(detail: string): string {
+  return detail.replace(/\s+/g, " ").trim().slice(0, 300);
+}
+
 export function LineBindingCard() {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Temporary diagnostic: raw (sanitized) LIFF init error, shown only for liff_init_error.
+  const [debugDetail, setDebugDetail] = useState("");
 
   // Do not initialize LIFF on mount.
   // In the LINE in-app browser, liff.init() can redirect the WebView back to the
@@ -78,6 +85,7 @@ export function LineBindingCard() {
   // LIFF initializes here — only in response to an explicit user tap, never on mount.
   async function handleLink() {
     setError("");
+    setDebugDetail("");
     setBusy(true);
     try {
       const state = await initLiff();
@@ -92,7 +100,7 @@ export function LineBindingCard() {
         if (process.env.NODE_ENV !== "production") {
           console.warn("[LineBindingCard] LIFF init failed:", state.message);
         }
-        throw new LineLinkError("liff_init_error");
+        throw new LineLinkError("liff_init_error", state.message);
       }
 
       if (!state.isInClient) {
@@ -110,6 +118,10 @@ export function LineBindingCard() {
       setView({ kind: "linked", account });
     } catch (err) {
       setError(messageFor(err));
+      // Temporary diagnostic: surface the raw LIFF init error (sanitized) for liff_init_error only.
+      if (err instanceof LineLinkError && err.code === "liff_init_error" && err.detail) {
+        setDebugDetail(sanitizeDebug(err.detail));
+      }
     } finally {
       setBusy(false);
     }
@@ -207,6 +219,11 @@ export function LineBindingCard() {
             <p className="mt-3 flex items-start gap-1.5 text-sm text-red-600">
               <Icon name="alertCircle" size={15} className="mt-0.5 shrink-0" />
               {error}
+            </p>
+          )}
+          {debugDetail && (
+            <p className="mt-2 break-words text-xs text-text-muted">
+              Debug: {debugDetail}
             </p>
           )}
         </div>
