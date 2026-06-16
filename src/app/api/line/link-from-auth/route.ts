@@ -60,12 +60,6 @@ export async function POST() {
     str(idData.sub) ?? str(idData.provider_id) ?? str(lineIdentity?.id);
 
   if (!lineUserId) {
-    // Temporary diagnostic: log only the available KEY names, never the values.
-    console.warn("[link-from-auth] LINE id not found", {
-      providers: identities.map((i) => i.provider),
-      identityDataKeys: Object.keys(idData),
-      metadataKeys: Object.keys(meta),
-    });
     return fail("line_identity_missing", 422);
   }
 
