@@ -28,7 +28,8 @@ const ERROR_MESSAGES: Record<LineLinkErrorCode, string> = {
   invalid_line_token: "LINE 驗證失敗，請重新整理後再試一次。",
   line_account_already_linked: "這個 LINE 帳號已綁定其他 BubanGo 帳號。",
   line_config_missing: "系統尚未完成 LINE 連動設定，請稍後再試。",
-  liff_not_ready: "LINE 初始化失敗，請關閉後重新從 LINE 開啟。",
+  liff_unconfigured: "LIFF 尚未設定，請確認 Vercel NEXT_PUBLIC_LIFF_ID 並重新部署。",
+  liff_init_error: "LINE 初始化失敗，請確認 LIFF ID 與 Endpoint URL 設定。",
   not_in_line: "請在 LINE App 內開啟 BubanGo 後再綁定。",
   link_failed: "LINE 綁定失敗，請稍後再試。",
   unlink_failed: "解除綁定失敗，請稍後再試。",
@@ -81,12 +82,17 @@ export function LineBindingCard() {
     try {
       const state = await initLiff();
 
-      if (state.kind !== "ready") {
-        // LIFF couldn't initialize (unconfigured, or the SDK's init() errored).
-        if (state.kind === "error" && process.env.NODE_ENV !== "production") {
+      if (state.kind === "unconfigured") {
+        // The production bundle has no NEXT_PUBLIC_LIFF_ID (env missing at build time).
+        throw new LineLinkError("liff_unconfigured");
+      }
+
+      if (state.kind === "error") {
+        // LIFF SDK init() failed (bad LIFF ID / Endpoint URL mismatch, etc.).
+        if (process.env.NODE_ENV !== "production") {
           console.warn("[LineBindingCard] LIFF init failed:", state.message);
         }
-        throw new LineLinkError("liff_not_ready");
+        throw new LineLinkError("liff_init_error");
       }
 
       if (!state.isInClient) {
