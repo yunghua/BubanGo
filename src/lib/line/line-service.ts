@@ -22,6 +22,7 @@ export type LineLinkErrorCode =
   | "invalid_line_token"
   | "line_account_already_linked"
   | "line_config_missing"
+  | "line_identity_missing"
   | "liff_unconfigured"
   | "liff_init_error"
   | "not_in_line"
@@ -89,6 +90,22 @@ async function postJson(
 
 export async function linkLineAccount(idToken: string): Promise<LineAccount> {
   const json = await postJson("/api/line/link", { idToken });
+  const acc = (json.account ?? {}) as Partial<LineAccount>;
+  return {
+    displayName: acc.displayName ?? null,
+    pictureUrl: acc.pictureUrl ?? null,
+    linkedAt: acc.linkedAt ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Bind the current user's LINE account using their authenticated Supabase
+ * identity (Custom OAuth provider `custom:line`) — no LIFF SDK / ID token.
+ * The server derives the LINE userId from the session; throws
+ * LineLinkError("line_identity_missing") when the user did not sign in with LINE.
+ */
+export async function linkLineAccountFromAuth(): Promise<LineAccount> {
+  const json = await postJson("/api/line/link-from-auth");
   const acc = (json.account ?? {}) as Partial<LineAccount>;
   return {
     displayName: acc.displayName ?? null,

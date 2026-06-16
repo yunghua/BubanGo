@@ -5,10 +5,9 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Spinner } from "@/components/ui/Spinner";
-import { initLiff, getLineIdToken } from "@/lib/line/liff";
 import {
   getMyLineAccount,
-  linkLineAccount,
+  linkLineAccountFromAuth,
   unlinkLineAccount,
   isLocalBackend,
   LineLinkError,
@@ -19,7 +18,7 @@ import {
 type View =
   | { kind: "loading" }
   | { kind: "local" } // local dev backend — no real session to bind
-  | { kind: "unlinked" } // not yet linked; tapping bind initializes LIFF on demand
+  | { kind: "unlinked" } // not yet linked; bind uses the server-side LINE identity
   | { kind: "linked"; account: LineAccount };
 
 const ERROR_MESSAGES: Record<LineLinkErrorCode, string> = {
@@ -28,6 +27,7 @@ const ERROR_MESSAGES: Record<LineLinkErrorCode, string> = {
   invalid_line_token: "LINE 驗證失敗，請重新整理後再試一次。",
   line_account_already_linked: "這個 LINE 帳號已綁定其他 BubanGo 帳號。",
   line_config_missing: "系統尚未完成 LINE 連動設定，請稍後再試。",
+  line_identity_missing: "請先使用 LINE 登入後再綁定通知。",
   liff_unconfigured: "LIFF 尚未設定，請確認 Vercel NEXT_PUBLIC_LIFF_ID 並重新部署。",
   liff_init_error: "LINE 初始化失敗，請確認 LIFF ID 與 Endpoint URL 設定。",
   not_in_line: "請在 LINE App 內開啟 BubanGo 後再綁定。",
@@ -41,22 +41,15 @@ function messageFor(err: unknown): string {
   return ERROR_MESSAGES[code] ?? ERROR_MESSAGES.link_failed;
 }
 
-/** Collapse whitespace and cap length before showing a raw error in the UI. */
-function sanitizeDebug(detail: string): string {
-  return detail.replace(/\s+/g, " ").trim().slice(0, 300);
-}
-
 export function LineBindingCard() {
   const [view, setView] = useState<View>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // Temporary diagnostic: raw (sanitized) LIFF init error, shown only for liff_init_error.
-  const [debugDetail, setDebugDetail] = useState("");
 
-  // Do not initialize LIFF on mount.
-  // In the LINE in-app browser, liff.init() can redirect the WebView back to the
-  // configured LIFF Endpoint URL. Initialize LIFF only after the user taps bind.
-  // On mount we only read the existing binding (own row, via RLS) — no LIFF call.
+  // No LIFF SDK is used anywhere in this component. liff.init() is unreliable in
+  // the LINE in-app browser after the Supabase OAuth round-trip, so binding now
+  // derives the LINE userId from the authenticated Supabase identity on the
+  // server. On mount we only read the existing binding (own row, via RLS).
   useEffect(() => {
     let active = true;
 
@@ -82,46 +75,16 @@ export function LineBindingCard() {
     };
   }, []);
 
-  // LIFF initializes here — only in response to an explicit user tap, never on mount.
+  // Bind using the server-side LINE identity (no LIFF SDK, no ID token in the
+  // browser). The route reads auth.getUser() and upserts line_accounts.
   async function handleLink() {
     setError("");
-    setDebugDetail("");
     setBusy(true);
     try {
-      const state = await initLiff();
-
-      if (state.kind === "unconfigured") {
-        // The production bundle has no NEXT_PUBLIC_LIFF_ID (env missing at build time).
-        throw new LineLinkError("liff_unconfigured");
-      }
-
-      if (state.kind === "error") {
-        // LIFF SDK init() failed (bad LIFF ID / Endpoint URL mismatch, etc.).
-        if (process.env.NODE_ENV !== "production") {
-          console.warn("[LineBindingCard] LIFF init failed:", state.message);
-        }
-        throw new LineLinkError("liff_init_error", state.message);
-      }
-
-      if (!state.isInClient) {
-        // Opened outside the LINE app — binding needs the in-app LIFF context.
-        throw new LineLinkError("not_in_line");
-      }
-
-      const idToken = await getLineIdToken();
-      if (!idToken) {
-        // LIFF ready and in-client, but no ID token (e.g. missing openid scope).
-        throw new LineLinkError("missing_id_token");
-      }
-
-      const account = await linkLineAccount(idToken);
+      const account = await linkLineAccountFromAuth();
       setView({ kind: "linked", account });
     } catch (err) {
       setError(messageFor(err));
-      // Temporary diagnostic: surface the raw LIFF init error (sanitized) for liff_init_error only.
-      if (err instanceof LineLinkError && err.code === "liff_init_error" && err.detail) {
-        setDebugDetail(sanitizeDebug(err.detail));
-      }
     } finally {
       setBusy(false);
     }
@@ -132,7 +95,7 @@ export function LineBindingCard() {
     setBusy(true);
     try {
       await unlinkLineAccount();
-      // Return to the unlinked state directly — do not initialize LIFF after unlink.
+      // Return to the unlinked state directly.
       setView({ kind: "unlinked" });
     } catch (err) {
       setError(messageFor(err));
@@ -219,11 +182,6 @@ export function LineBindingCard() {
             <p className="mt-3 flex items-start gap-1.5 text-sm text-red-600">
               <Icon name="alertCircle" size={15} className="mt-0.5 shrink-0" />
               {error}
-            </p>
-          )}
-          {debugDetail && (
-            <p className="mt-2 break-words text-xs text-text-muted">
-              Debug: {debugDetail}
             </p>
           )}
         </div>
