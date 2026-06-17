@@ -39,8 +39,8 @@ is **not** required.
 
 ## 1. LINE Developers Console (manual)
 
-You can reuse the existing **LINE Login channel** from
-[`LIFF_SETUP.md`](./LIFF_SETUP.md), or create a dedicated one.
+Use a **LINE Login channel** under your Provider (create one if you don't have it
+yet).
 
 1. Open the [LINE Developers Console](https://developers.line.biz/console/) →
    your Provider → the **LINE Login channel**.
@@ -96,9 +96,12 @@ the existing:
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | callback exchange + all auth |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | client/server Supabase (RLS) |
 
-`NEXT_PUBLIC_LIFF_ID` / `LINE_CHANNEL_ID` remain only for LIFF + the notification
-binding card (see [`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md)); they
-are **not** required for LINE Login.
+There are **no other app env vars.** The old `NEXT_PUBLIC_LIFF_ID` /
+`LINE_CHANNEL_ID` vars were removed in v0.1.7: the LIFF-token binding flow (and the
+LIFF SDK) is gone. LINE **notification binding** now derives the LINE identity from
+the signed-in user's Supabase Auth session and uses the
+`POST /api/line/link-from-auth` and `POST /api/line/unlink` routes — see
+[`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md).
 
 > The Channel **secret** is **only** in Supabase Dashboard → provider settings.
 > Never in `.env.local`, the repo, or chat.
@@ -135,16 +138,15 @@ Login does not replace or remove this path.
 
 ## Rich Menu (manual, future)
 
-Not automated. Suggested mixed 4-tile layout (我要找人 / 我要補班 / 我的申請 /
-客服·說明) and its targets are documented in
-[`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md#rich-menu--suggested-mixed-layout-manual-not-automated).
+Not automated — a Rich Menu is future work. See the notes in
+[`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md).
 
 ## LINE push notifications (future work)
 
 Out of scope here. LINE *Login* (this doc) identifies users; LINE *push* needs a
 separate **Messaging API channel** + the `line_accounts` binding (kept for
 exactly this). See the future plan in
-[`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md#future-push-notification-plan-next-task-not-now).
+[`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md).
 
 ---
 
