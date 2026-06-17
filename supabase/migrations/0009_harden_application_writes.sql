@@ -19,30 +19,32 @@
 --       accept_application's FOR UPDATE lock + capacity check).
 --
 -- Fix (Option A) — funnel ALL application writes through the RPCs:
---   1) Drop the two direct WRITE policies on applications. SELECT policies are
---      kept, so the worker "my applications" and owner "applicants" reads are
---      unchanged. With no INSERT/UPDATE policy, direct PostgREST writes are denied
---      (RLS default-deny); there is no DELETE policy, so direct deletes were
---      already denied.
---   2) Convert accept_application / reject_application to SECURITY DEFINER so they
---      keep working after the owner UPDATE policy is removed (apply_to_shift is
+--   1) Convert accept_application / reject_application to SECURITY DEFINER so they
+--      perform their own writes without the owner UPDATE policy (apply_to_shift is
 --      already DEFINER). They still derive identity from auth.uid() (which returns
 --      the CALLER's id inside a DEFINER function) and enforce explicit owner/role
 --      checks (not_shift_owner / not_authenticated), and keep SET search_path =
 --      public (already set in their definitions — the key DEFINER hardening).
+--   2) Drop the two direct WRITE policies on applications. SELECT policies are
+--      kept, so the worker "my applications" and owner "applicants" reads are
+--      unchanged. With no INSERT/UPDATE policy, direct PostgREST writes are denied
+--      (RLS default-deny); there is no DELETE policy, so direct deletes were
+--      already denied.
+--
+-- ORDER MATTERS: the DEFINER conversion (step 1) runs BEFORE the policies are
+-- dropped (step 2). Each DDL statement auto-commits, so doing it the other way
+-- round would leave a brief window where the policy is gone while accept/reject
+-- are still SECURITY INVOKER — a concurrent accept/reject in that instant would
+-- fail. This order removes that window.
 --
 -- Not done here: no service_role, no policy loosening, no broad table grants, no
--- schema/column changes, no edits to schema.sql comments. App UI is unaffected.
+-- schema/column changes, no edits to schema.sql comments. apply_to_shift and the
+-- SELECT policies are untouched. App UI is unaffected.
 --
--- Idempotent: DROP POLICY IF EXISTS + ALTER FUNCTION + GRANT/REVOKE are repeatable.
+-- Idempotent: ALTER FUNCTION + GRANT/REVOKE + DROP POLICY IF EXISTS are repeatable.
 
--- 1) Remove direct write access to applications; reads stay as-is.
-drop policy if exists "applications_insert_worker" on public.applications;
-drop policy if exists "applications_update_shop_owner" on public.applications;
-
--- 2) accept/reject must no longer depend on the (now removed) owner UPDATE policy.
---    SECURITY DEFINER lets them perform their own writes; their internal auth.uid()
---    + owner checks remain the authorization layer. ALTER preserves each function's
+-- 1) Convert accept/reject to SECURITY DEFINER FIRST, so they no longer depend on
+--    the soon-to-be-dropped owner UPDATE policy. ALTER preserves each function's
 --    existing body and its `SET search_path = public` (migrations 0003 / 0006).
 alter function public.accept_application(uuid) security definer;
 alter function public.reject_application(uuid) security definer;
@@ -53,3 +55,8 @@ revoke all on function public.accept_application(uuid) from public, anon;
 grant execute on function public.accept_application(uuid) to authenticated;
 revoke all on function public.reject_application(uuid) from public, anon;
 grant execute on function public.reject_application(uuid) to authenticated;
+
+-- 2) NOW that accept/reject are DEFINER, remove direct write access to
+--    applications; reads stay as-is.
+drop policy if exists "applications_insert_worker" on public.applications;
+drop policy if exists "applications_update_shop_owner" on public.applications;
