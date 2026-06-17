@@ -18,26 +18,17 @@ export interface LineAccount {
 
 export type LineLinkErrorCode =
   | "not_authenticated"
-  | "missing_id_token"
-  | "invalid_line_token"
   | "line_account_already_linked"
-  | "line_config_missing"
   | "line_identity_missing"
-  | "liff_unconfigured"
-  | "liff_init_error"
-  | "not_in_line"
   | "link_failed"
   | "unlink_failed"
   | "network_error";
 
 export class LineLinkError extends Error {
   code: LineLinkErrorCode;
-  /** Optional non-secret diagnostic detail (e.g. the raw LIFF init error). */
-  detail?: string;
-  constructor(code: LineLinkErrorCode, detail?: string) {
+  constructor(code: LineLinkErrorCode) {
     super(code);
     this.code = code;
-    this.detail = detail;
     this.name = "LineLinkError";
   }
 }
@@ -86,16 +77,6 @@ async function postJson(
     throw new LineLinkError(code);
   }
   return json;
-}
-
-export async function linkLineAccount(idToken: string): Promise<LineAccount> {
-  const json = await postJson("/api/line/link", { idToken });
-  const acc = (json.account ?? {}) as Partial<LineAccount>;
-  return {
-    displayName: acc.displayName ?? null,
-    pictureUrl: acc.pictureUrl ?? null,
-    linkedAt: acc.linkedAt ?? new Date().toISOString(),
-  };
 }
 
 /**

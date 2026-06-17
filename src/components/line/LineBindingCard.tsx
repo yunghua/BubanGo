@@ -23,14 +23,8 @@ type View =
 
 const ERROR_MESSAGES: Record<LineLinkErrorCode, string> = {
   not_authenticated: "請先登入 BubanGo 再綁定 LINE。",
-  missing_id_token: "無法取得 LINE 授權，請確認 LIFF 權限包含 openid，或重新同意授權。",
-  invalid_line_token: "LINE 驗證失敗，請重新整理後再試一次。",
   line_account_already_linked: "這個 LINE 帳號已綁定其他 BubanGo 帳號。",
-  line_config_missing: "系統尚未完成 LINE 連動設定，請稍後再試。",
   line_identity_missing: "請先使用 LINE 登入後再綁定通知。",
-  liff_unconfigured: "LIFF 尚未設定，請確認 Vercel NEXT_PUBLIC_LIFF_ID 並重新部署。",
-  liff_init_error: "LINE 初始化失敗，請確認 LIFF ID 與 Endpoint URL 設定。",
-  not_in_line: "請在 LINE App 內開啟 BubanGo 後再綁定。",
   link_failed: "LINE 綁定失敗，請稍後再試。",
   unlink_failed: "解除綁定失敗，請稍後再試。",
   network_error: "網路連線不穩，請稍後再試。",

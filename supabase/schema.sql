@@ -2,10 +2,11 @@
 -- Run in Supabase SQL Editor or via `supabase db push` after linking project.
 --
 -- Notes:
--- - applicant_count: maintained by repository layer in MVP; move to trigger/RPC before production.
--- - acceptApplication: use RPC + transaction before production to avoid race conditions when
---   multiple workers apply and owners accept concurrently.
--- - MVP: repository may update applications.status and shifts.status in separate queries.
+-- - applicant_count: maintained by a DB trigger on applications INSERT/DELETE (migration 0001).
+-- - apply/accept/reject run through row-locked SECURITY DEFINER RPCs (migrations 0003/0004/0006),
+--   so concurrent accepts cannot overbook a shift.
+-- - Direct INSERT/UPDATE on applications is disabled by RLS (migration 0009); the RPCs are the
+--   only write path.
 
 -- ---------------------------------------------------------------------------
 -- Extensions
@@ -120,10 +121,10 @@ create table public.shifts (
 comment on table public.shifts is
   'Short-term shift postings published by shops.';
 
--- applicant_count: MVP repository increments on apply; production should use trigger or RPC.
+-- applicant_count: kept in sync by the sync_applicant_count() trigger (migration 0001).
 comment on column public.shifts.applicant_count is
-  'Denormalized count of applications. MVP: maintained in repository layer. '
-  'Production: prefer DB trigger on applications INSERT/DELETE or periodic reconcile.';
+  'Denormalized count of applications. Maintained by the sync_applicant_count() trigger '
+  'on applications INSERT/DELETE (migration 0001).';
 
 comment on column public.shifts.required_workers is
   'Number of workers needed. Maps to TypeScript Shift.requiredWorkers.';
@@ -154,12 +155,12 @@ create table public.applications (
 );
 
 comment on table public.applications is
-  'Worker applications to shifts. accept/reject in MVP via repository; use RPC before production.';
+  'Worker applications to shifts. apply/accept/reject go through row-locked SECURITY DEFINER RPCs.';
 
--- acceptApplication race: two owners or concurrent accepts — use RPC + row lock in production.
+-- acceptApplication race: handled by the accept_application RPC (FOR UPDATE row lock; migration 0003).
 comment on column public.applications.status is
-  'MVP: repository updates status and may update shifts.status in a second query. '
-  'Production: accept_application RPC should run in one transaction with FOR UPDATE on shift.';
+  'Updated only via the apply/accept/reject RPCs (SECURITY DEFINER, row-locked). '
+  'Direct writes to applications are disabled by RLS after migration 0009.';
 
 create index applications_shift_id_idx on public.applications (shift_id);
 create index applications_worker_id_idx on public.applications (worker_id);
