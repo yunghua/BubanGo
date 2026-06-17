@@ -259,6 +259,17 @@ export interface Database {
           required_workers: number;
         };
       };
+      /**
+       * LINE push target lookup (migration 0010). Returns the accepted worker's
+       * line_accounts.line_user_id, or null if they have no linked LINE account.
+       * SECURITY DEFINER; raises if the caller does not own the shift or the
+       * application is not 'accepted'. Used server-side only (to send a push) —
+       * the value is never returned to the browser.
+       */
+      get_line_push_target: {
+        Args: { p_application_id: string };
+        Returns: string | null;
+      };
     };
     Enums: Record<never, never>;
     CompositeTypes: Record<never, never>;

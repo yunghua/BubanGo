@@ -1,7 +1,8 @@
 # LINE Account Binding
 
-Lets a signed-in BubanGo user link their account to their LINE account, so we can
-(in a later task) send shift/match notifications over LINE. This does **not**
+Lets a signed-in BubanGo user link their account to their LINE account so we can
+send them notifications over LINE — currently a push when a shop owner accepts
+their application (see "LINE push — accept notification" below). This does **not**
 replace Supabase email/password auth — it's an optional add-on.
 
 > **How binding works now (v0.1.7+):** binding derives the LINE userId from the
@@ -10,11 +11,11 @@ replace Supabase email/password auth — it's an optional add-on.
 > and no ID token is sent from the browser. The old LIFF-token flow (`liff.ts` +
 > the `POST /api/line/link` route) has been **removed**.
 
-> **Still needed after LINE Login?** Yes — for the future **push** feature.
-> `line_accounts` is the RLS-protected place to store the verified LINE userId for
-> the **Messaging API** push later. Today it records the binding for users who
-> signed in with LINE; email/password users must sign in with LINE before they can
-> bind (see below).
+> **Why this matters for push:** `line_accounts` is the RLS-protected place that
+> stores the verified LINE userId the **Messaging API** push uses (see "LINE push
+> — accept notification" below). Today it records the binding for users who signed
+> in with LINE; email/password users must sign in with LINE before they can bind
+> (see below).
 
 ---
 
@@ -131,18 +132,55 @@ Binding is never required to use the app.
 
 ---
 
-## Rich Menu / push — future work (not implemented)
+## LINE push — accept notification (v0.1.8)
 
-LINE push (Messaging API), a Rich Menu, and follow/unfollow webhooks are **not**
-built yet. The plan when that work starts:
+When a shop owner accepts a worker's application, the server sends that worker a
+plain-text LINE push 「你已錄取補班！」 with the shop name, shift, and time — **if**
+the worker has a linked LINE account and has added the Messaging API Official
+Account as a friend. This is the only push implemented so far.
 
-1. Create a **Messaging API channel** (separate from the LINE Login channel) and
-   store its `LINE_CHANNEL_ACCESS_TOKEN` **server-side only** (never the repo).
-2. Add a `messaging_opt_in` (and likely follow-state) column to `line_accounts`,
-   plus a webhook route for follow/unfollow events.
-3. On accept/reject/new-match, send a push to the user's `line_user_id` from the
-   server (service-side token, still no service_role Supabase key).
-4. Respect opt-in/opt-out and LINE's messaging quota; add retry/back-off.
+### Where it runs
+
+`POST /api/applications/[applicationId]/accept` (Node runtime, server-only):
+
+1. `auth.getUser()` — 401 if not signed in.
+2. `accept_application` RPC (unchanged; row-locked, ownership + capacity guards).
+3. If the accept filled the shift, auto-decline the remaining pending applicants
+   (moved here from the browser repository).
+4. `get_line_push_target(p_application_id)` — SECURITY DEFINER RPC (migration
+   0010) returning the accepted worker's `line_user_id`, or null. It verifies the
+   caller owns the shift and the application is `accepted`, so an owner can only
+   ever resolve the LINE userId of a worker they actually accepted.
+5. If linked, [`src/lib/line/line-messaging.ts`](../src/lib/line/line-messaging.ts)
+   sends the push via the Messaging API using `LINE_CHANNEL_ACCESS_TOKEN`.
+
+The browser repository's `acceptApplication` simply calls this route; the UI is
+unchanged.
+
+### Security / failure behaviour
+
+- **Accept always wins.** The push (and the auto-decline) are best-effort: if the
+  push is skipped or fails, the accept still succeeds.
+- **`LINE_CHANNEL_ACCESS_TOKEN` is server-only** — no `NEXT_PUBLIC_`, read only in
+  `line-messaging.ts`, never logged, never sent to the browser. It is the
+  **Messaging API** channel token (that channel shares the LINE Login provider, so
+  the stored `line_user_id` is addressable). Set it in Vercel env (Production +
+  Preview, marked Sensitive). See [`.env.example`](../.env.example).
+- **No service_role, no RLS loosening.** `line_accounts` stays own-row only; the
+  DEFINER RPC is the controlled read path. The response never includes
+  `line_user_id` — only a coarse status (`sent` / `skipped_no_line` /
+  `skipped_unconfigured` / `failed`).
+- **Not friended → 403.** LINE only delivers to users who have added the OA as a
+  friend, so a worker who signed in with LINE but never added the OA does not
+  receive the push (logged as `failed`; the accept is unaffected).
+
+### Still future work
+
+A Rich Menu, follow/unfollow webhooks, stored messaging opt-in/opt-out, new-shift
+broadcasts, reminders, and reject / other notifications are **not** built. Adding
+them would likely introduce a `messaging_opt_in` / follow-state column on
+`line_accounts` plus a webhook route, and should respect LINE's messaging quota
+with retry/back-off.
 
 ---
 
@@ -152,10 +190,14 @@ built yet. The plan when that work starts:
   delete (unlink), all via the RLS-scoped anon client.
 - `line_accounts` table with RLS (own-row only) and one-to-one uniqueness.
 - Binding card on `/worker/profile` and `/store/settings`.
+- **LINE push on accept** (v0.1.8): a plain-text 「已錄取」 notice to the accepted
+  worker, server-side and best-effort (see above).
 - Normal browser usage and the localStorage fallback are unaffected.
 
 ## What's **not** implemented yet
 
-- ❌ LINE push / Messaging API.
+- ❌ Any push other than the accept notice (new-shift broadcast, reminders,
+  reject / store notifications, bulk push).
 - ❌ Rich Menu creation/automation.
-- ❌ Follow/unfollow webhooks, messaging consent storage.
+- ❌ Follow/unfollow webhooks, messaging opt-in/opt-out storage.
+- ❌ Flex messages (the accept notice is plain text).

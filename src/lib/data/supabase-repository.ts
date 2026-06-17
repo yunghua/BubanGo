@@ -346,67 +346,37 @@ export class SupabaseRepository implements BubanGoRepository {
   }
 
   /**
-   * Accept an application atomically via the `accept_application` RPC
-   * (migration 0003). The function locks the shift row FOR UPDATE and does the
-   * capacity check + status flip in one transaction, removing the race the old
-   * read-then-write path had. RLS still applies (SECURITY INVOKER).
+   * Accept an application. The accept, the best-effort auto-decline of the
+   * remaining pending applicants, and the LINE push to the accepted worker now
+   * all run server-side in `POST /api/applications/[applicationId]/accept`:
+   *
+   *   - that route is the only place the server-only LINE_CHANNEL_ACCESS_TOKEN is
+   *     read, and the only place that can resolve the worker's LINE userId
+   *     (line_accounts is own-row under RLS, so the owner's session cannot read
+   *     it directly — the route uses the SECURITY DEFINER get_line_push_target);
+   *   - it runs the same row-locked `accept_application` RPC under the owner's
+   *     own cookie session, so RLS / ownership / capacity guarantees are
+   *     unchanged from the previous direct browser call.
+   *
+   * On failure the route returns the RPC's error code, which we map to the same
+   * UI text as before. The push result is intentionally not surfaced to the UI —
+   * the accept succeeds regardless of whether the push was sent.
    */
   async acceptApplication(applicationId: string): Promise<void> {
-    const { data, error } = await this.client.rpc("accept_application", {
-      p_application_id: applicationId,
-    });
-
-    if (error) {
-      throw new Error(translateAcceptError(error.message));
+    let res: Response;
+    try {
+      res = await fetch(
+        `/api/applications/${encodeURIComponent(applicationId)}/accept`,
+        { method: "POST" }
+      );
+    } catch {
+      throw new Error("操作失敗，請稍後再試");
     }
 
-    // When this accept fills the shift, decline the still-pending applicants so
-    // they don't sit in 審核中 forever. Best-effort and non-fatal: the accept has
-    // already committed, so a failed decline must never surface as an accept error.
-    if (data?.shift_status === "matched" && data.shift_id) {
-      await this.declineRemainingPending(data.shift_id, applicationId);
-    }
-  }
-
-  /**
-   * Reject every still-pending application on a now-matched shift (except the one
-   * just accepted) via the existing reject_application RPC. Best-effort: runs the
-   * rejects in parallel (Promise.allSettled) and logs any that fail — it never
-   * throws, so it cannot roll back the accept that already succeeded.
-   */
-  private async declineRemainingPending(
-    shiftId: string,
-    acceptedApplicationId: string
-  ): Promise<void> {
-    const { data: pending, error } = await this.client
-      .from("applications")
-      .select("id")
-      .eq("shift_id", shiftId)
-      .eq("status", "pending");
-
-    if (error || !pending) return;
-
-    const toDecline = pending.filter((a) => a.id !== acceptedApplicationId);
-    if (toDecline.length === 0) return;
-
-    const results = await Promise.allSettled(
-      toDecline.map((a) =>
-        this.client
-          .rpc("reject_application", { p_application_id: a.id })
-          .then(({ error: rejectError }) => {
-            if (rejectError) throw new Error(rejectError.message);
-          })
-      )
-    );
-
-    const failedIds: string[] = [];
-    results.forEach((result, i) => {
-      if (result.status === "rejected") failedIds.push(toDecline[i].id);
-    });
-    if (failedIds.length > 0) {
-      console.error(
-        "[acceptApplication] failed to auto-decline pending applications:",
-        failedIds
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) {
+      throw new Error(
+        json.error ? translateAcceptError(json.error) : "操作失敗，請稍後再試"
       );
     }
   }
