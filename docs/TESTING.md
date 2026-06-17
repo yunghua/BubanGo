@@ -101,32 +101,36 @@ to test the real LINE round-trip. No destructive e2e is run for this feature.
 ## LINE account binding
 
 Binding adds the `line_accounts` table (migration `0007`) + two API routes
-(`/api/line/link`, `/api/line/unlink`). It does **not** change Supabase Auth, the
-existing RPCs, RLS on existing tables, the repository, or middleware — so the
-existing `e2e-flow.mjs` is **unaffected and does not need re-running** for this
+(`/api/line/link-from-auth`, `/api/line/unlink`). It does **not** change Supabase
+Auth, the existing RPCs, RLS on existing tables, the repository, or middleware — so
+the existing `e2e-flow.mjs` is **unaffected and does not need re-running** for this
 feature. No LINE inbox or device is needed for the checks below.
+
+Binding derives the LINE userId from the signed-in user's Supabase Auth LINE
+identity (`custom:line`); no LIFF SDK runs and no ID token is sent from the
+browser. See [`LINE_ACCOUNT_BINDING.md`](./LINE_ACCOUNT_BINDING.md).
 
 What to verify (no device required):
 
-1. `npm run build` passes — type-checks the routes/SDK and lists
-   `ƒ /api/line/link` and `ƒ /api/line/unlink`.
-2. **Plain browser, no `NEXT_PUBLIC_LIFF_ID`:** `/worker/profile` and
-   `/store/settings` render; the LINE card shows the "請在 LINE App 內開啟" state
-   with a disabled CTA. The rest of the app is unaffected.
+1. `npm run build` passes and lists `ƒ /api/line/link-from-auth` and
+   `ƒ /api/line/unlink`.
+2. **Card renders** on `/worker/profile` and `/store/settings`: with no binding it
+   shows the active 「綁定 LINE 接收通知」 button; the rest of the app is unaffected.
 3. **Local backend** (`NEXT_PUBLIC_DATA_BACKEND=local`): the card shows the
    "本機測試模式" note and makes no network calls.
-4. **Auth required:** `curl -X POST <site>/api/line/link -H 'content-type:
-   application/json' -d '{}'` with no session returns `401 not_authenticated`;
-   with a session but no token, `400 missing_id_token`.
-5. **Duplicate guard (SQL Editor):** insert two `line_accounts` rows with the
+4. **Auth required:** `curl -X POST <site>/api/line/link-from-auth` with no session
+   returns `401 not_authenticated`.
+5. **Email/password user (not signed in via LINE):** tapping 「綁定 LINE 接收通知」
+   returns `422 line_identity_missing`; the card shows
+   「請先使用 LINE 登入後再綁定通知。」.
+6. **Duplicate guard (SQL Editor):** insert two `line_accounts` rows with the
    same `line_user_id` for different `user_id`s → the 2nd fails with `23505`
    (unique). This is the constraint the API surfaces as
    `line_account_already_linked`. Delete the test rows afterwards.
-6. **RLS:** a signed-in user selecting `line_accounts` sees only their own row.
+7. **RLS:** a signed-in user selecting `line_accounts` sees only their own row.
 
-Requires a phone + a configured LIFF app (manual, see
-[`LIFF_SETUP.md`](./LIFF_SETUP.md)): the full in-LINE flow — open BubanGo inside
-LINE, tap 「綁定 LINE 接收通知」, confirm the verified link, then 「解除綁定」.
+To exercise the full positive path, sign in with a real LINE account (LINE Login),
+then tap 「綁定 LINE 接收通知」 and confirm 「已綁定 LINE」, then 「解除綁定」.
 
 ## Cleanup
 
